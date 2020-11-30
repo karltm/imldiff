@@ -7,6 +7,12 @@ name = "pypi"
 jupyterlab = "*"
 scikit-learn = "*"
 pandas = "*"
+shap = "*"
+ipympl = "*"
+numpy = "*"
+scipy = "*"
+sympy = "*"
+seaborn = "*"
 
 [dev-packages]
 

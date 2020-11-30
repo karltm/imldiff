@@ -1,9 +1,9 @@
 # Explaining Differences between Classifiers Using Interpretable Machine Learning
 
 ## Install
-Using [pipenv](https://github.com/pypa/pipenv):
+Clone this repository and install dependencies with [pipenv](https://github.com/pypa/pipenv):
 ```
-pipenv install -e git+https://github.com/MasterKarl/imldiff.git#egg=imldiff
+pipenv install
 ```
 
 ## Run

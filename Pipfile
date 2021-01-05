@@ -13,6 +13,8 @@ numpy = "*"
 scipy = "*"
 sympy = "*"
 seaborn = "*"
+xgboost = "*"
+jupyter = "*"
 
 [dev-packages]
 

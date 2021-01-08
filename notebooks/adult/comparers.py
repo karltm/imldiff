@@ -1,5 +1,4 @@
 import shap
-from sklearn.utils import resample
 import sklearn
 import xgboost as xgb
 import numpy as np
@@ -10,7 +9,8 @@ from datetime import datetime
 X, y = shap.datasets.adult()
 display_data = shap.datasets.adult(display=True)[0].values
 
-X_small, y_small, display_data_small = resample(X, y, display_data, n_samples=int(len(X)/10), replace=False, stratify=y, random_state=0)
+def make_path(filename):
+    return os.path.join('models', filename)
 
 
 class Model:
@@ -29,7 +29,7 @@ class Model:
 class LogisticRegressionModel(Model):
     '''a simple linear logistic model'''
     
-    _filename = os.path.join('models', __qualname__ + '.pickle')
+    _filename = make_path(__qualname__ + '.pickle')
 
     def __init__(self):
         self.model = None
@@ -65,7 +65,7 @@ class LogisticRegressionModel(Model):
 class XGBModel(Model):
     '''a boosted tree model'''
     
-    _filename = os.path.join('models', __qualname__ + '.json')
+    _filename = make_path(__qualname__ + '.json')
     
     def __init__(self):
         self.model = xgb.XGBClassifier(nestimators=100, max_depth=2)

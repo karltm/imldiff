@@ -117,6 +117,9 @@ class LogisticRegressionVsXGBComparer(Comparer):
         
     def diff_proba(self, X):
         return self.model_b.predict_proba(X) - self.model_a.predict_proba(X)
+    
+    def diff_abs_proba(self, X):
+        return abs(self.model_b.predict_proba(X) - self.model_a.predict_proba(X))
         
     def simil_proba(self, X):
         return self.model_a.predict_proba(X) * self.model_b.predict_proba(X)

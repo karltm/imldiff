@@ -13,19 +13,19 @@ class Explainer:
         self._model = model
         self._filename = os.path.join('models', identifier + '.exp')
         
-    def load_or_generate(self, X):
+    def load_or_generate(self, X, display_data=None):
         try:
             self._load()
             print('Loaded explanation: ' + self._filename)
         except ExplainerLoadException:
-            self.generate(X)
+            self.generate(X, display_data)
             
     def _load(self):
         pass
     
-    def generate(self, X):
+    def generate(self, X, display_data=None):
         started = datetime.now()
-        self._make_explanation(X)
+        self._make_explanation(X, display_data)
         print(f'Finished generating: {self._filename} ({datetime.now() - started})')
         self._save()
         
@@ -45,10 +45,12 @@ class SHAPExplainer(Explainer):
         except FileNotFoundError:
             raise ExplainerLoadException()
 
-    def _make_explanation(self, X):
+    def _make_explanation(self, X, display_data=None):
         masker = shap.maskers.Independent(X, max_samples=100)
         explainer = shap.Explainer(self._model.predict, masker)
         self.shap_values = explainer(X)
+        if display_data is not None:
+            self.shap_values.display_data = display_data
         
     def _save(self):
         with open(self._filename, 'wb') as f:

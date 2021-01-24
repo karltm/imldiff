@@ -14,7 +14,7 @@ class DifferenceComparer(Comparer):
 class AbsoluteDifferenceComparer(DifferenceComparer):
     
     def predict(self, X):
-        return abs(super(self, AbsoluteDifferenceComparer).predict(X))
+        return abs(super(AbsoluteDifferenceComparer, self).predict(X))
     
     
 class SimilarityComparer(Comparer):

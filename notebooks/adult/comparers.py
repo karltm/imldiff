@@ -23,7 +23,7 @@ class SimilarityComparer(Comparer):
         return self.model_a.predict(X) * self.model_b.predict(X)
     
     
-class AdditionComparer(Comparer):
+class SumComparer(Comparer):
     
     def predict(self, X):
         return self.model_a.predict(X) + self.model_b.predict(X)

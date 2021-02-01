@@ -10,6 +10,7 @@ class ExplainerLoadException(Exception):
 class Explainer:
     
     def __init__(self, model, identifier):
+        self.identifier = identifier
         self._model = model
         self._filename = os.path.join('models', identifier + '.exp')
         
@@ -37,6 +38,10 @@ class Explainer:
     
     
 class SHAPExplainer(Explainer):
+    
+    def __init__(self, model, identifier, shap_values=None):
+        super(SHAPExplainer, self).__init__(model, identifier)
+        self.shap_values = shap_values
 
     def _load(self):
         try:

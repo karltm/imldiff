@@ -9,12 +9,10 @@ class ExplainerLoadException(Exception):
 
 class Explainer:
     
-    group_identifier = ''
-    
     def __init__(self, model, identifier):
         self.identifier = identifier
         self._model = model
-        self._filename = os.path.join('models', f'{self.group_identifier}.{self.identifier}.exp')
+        self._filename = os.path.join('models', self.identifier + '.exp')
         
     def load_or_generate(self, X, display_data=None):
         try:

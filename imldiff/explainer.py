@@ -36,7 +36,7 @@ class Explainer:
         pass
 
     
-class SHAPExplainer(Explainer):
+class BaseSHAPExplainer(Explainer):
 
     def _load(self):
         try:

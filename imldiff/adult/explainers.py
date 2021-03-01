@@ -1,9 +1,9 @@
 import shap
 from shap.maskers import Independent
-from imldiff.explainer import SHAPExplainer
+from imldiff.explainer import BaseSHAPExplainer
 
 
-class AdultSHAPExplainer(SHAPExplainer):
+class SHAPExplainer(BaseSHAPExplainer):
     def _make_explanation(self, model, X):
         masker = Independent(X, max_samples=100)
         explainer = shap.Explainer(model, masker)

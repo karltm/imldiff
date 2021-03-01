@@ -14,6 +14,6 @@ pip install -r requirements.txt
 
 ## Run notebook server
 ```
-jupyter lab
+./start.sh
 ```
 

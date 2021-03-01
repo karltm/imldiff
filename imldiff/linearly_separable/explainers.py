@@ -6,7 +6,7 @@ from imldiff.explainer import BaseSHAPExplainer
 class SHAPExplainer(BaseSHAPExplainer):
 
     def _make_explanation(self, model, X):
-        masker = Independent(X, max_samples=100)
+        masker = Independent(X, max_samples=1000)
         explainer = shap.Explainer(model, masker)
         self.shap_values = explainer(X)
 

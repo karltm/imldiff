@@ -10,9 +10,12 @@ class ModelLoadException(Exception):
 class Model:
         
     def __init__(self):
-        self._filename = os.path.join('..', 'models', self.__class__.__name__)
+        self._filename = os.path.join('..', 'models', str(self))
         self.model = self._make_model()
-        
+
+    def __str__(self):
+        return self.__class__.__name__
+
     def _make_model(self):
         pass
     

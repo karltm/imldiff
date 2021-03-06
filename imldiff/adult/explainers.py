@@ -4,10 +4,9 @@ from imldiff.explainer import BaseSHAPExplainer
 
 
 class SHAPExplainer(BaseSHAPExplainer):
-    def _make_explanation(self, model, X):
-        masker = Independent(X, max_samples=100)
-        explainer = shap.Explainer(model, masker)
-        self.shap_values = explainer(X)
-        
-    def set_display_data(self, display_data):
+    def _make_explanation(self, model, X, display_data=None, feature_names=None):
+        self.masker = Independent(X, max_samples=100)
+        self.explainer = shap.Explainer(model, self.masker, feature_names=feature_names)
+        self.shap_values = self.explainer(X)
         self.shap_values.display_data = display_data
+

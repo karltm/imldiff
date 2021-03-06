@@ -23,13 +23,13 @@ class Explainer:
     def _load(self):
         pass
     
-    def generate(self, model, X):
+    def generate(self, model, X, **kwargs):
         started = datetime.now()
-        self._make_explanation(model, X)
+        self._make_explanation(model, X, **kwargs)
         print(f'Finished generating: {self._filename} ({datetime.now() - started})')
         self._save()
         
-    def _make_explanation(self, model, X):
+    def _make_explanation(self, model, X, **kwargs):
         pass
     
     def _save(self):

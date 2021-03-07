@@ -13,12 +13,12 @@ class Explainer:
         self.identifier = identifier
         self._filename = os.path.join('explanations', self.identifier + '.exp')
         
-    def load_or_generate(self, model, X):
+    def load_or_generate(self, model, X, **kwargs):
         try:
             self._load()
             print('Loaded explanation: ' + self._filename)
         except ExplainerLoadException:
-            self.generate(model, X)
+            self.generate(model, X, **kwargs)
             
     def _load(self):
         pass

@@ -17,19 +17,30 @@ class Comparer:
 class DifferenceComparer(Comparer):
     def _predict(self, predict_a, predict_b, X):
         return predict_b(X) - predict_a(X)
+
+    def __str__(self):
+        return f'Difference of {self.model_b} and {self.model_a}'
     
     
 class AbsoluteDifferenceComparer(DifferenceComparer):
     def _predict(self, predict_a, predict_b, X):
         return abs(super(AbsoluteDifferenceComparer, self)._predict(predict_a, predict_b, X))
+
+    def __str__(self):
+        return f'Absolute Difference of {self.model_b} and {self.model_a}'
     
     
 class SimilarityComparer(Comparer):
     def _predict(self, predict_a, predict_b, X):
         return predict_a(X) * predict_b(X)
+
+    def __str__(self):
+        return f'Similarity of {self.model_a} and {self.model_b}'
     
     
 class SumComparer(Comparer):
     def _predict(self, predict_a, predict_b, X):
         return predict_a(X) + predict_b(X)
-    
+
+    def __str__(self):
+        return f'Sum of {self.model_a} and {self.model_b}'

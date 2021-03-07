@@ -35,6 +35,9 @@ class Explainer:
     def _save(self):
         pass
 
+    def __str__(self):
+        return self.identifier
+
     
 class BaseSHAPExplainer(Explainer):
 

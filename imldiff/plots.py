@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 import numpy as np
+import shap
+from sklearn.decomposition import PCA
 
 
 def plot_decision_boundaries(models, X, y=None):
@@ -38,3 +40,23 @@ def plot_decision_boundaries(models, X, y=None):
         ax.set_title(model)
 
         i += 1
+
+
+def force_plot(explainer, ordering=None):
+    return shap.plots.force(
+        base_value=explainer.shap_values.abs.mean(0).base_values,
+        shap_values=explainer.shap_values.values,
+        features=explainer.shap_values.display_data,
+        feature_names=explainer.shap_values.feature_names,
+        out_names=str(explainer),
+        ordering_keys=ordering)
+
+
+def get_force_plot_ordering(plot):
+    return list(map(lambda x: int(x['simIndex']), plot.data['explanations']))
+
+
+def make_pca_embedding_values(explainer):
+    pca = PCA(2)
+    return pca.fit_transform(explainer.shap_values.values)
+

@@ -6,9 +6,10 @@ from sklearn.decomposition import PCA
 
 
 def plot_decision_boundaries(models, X, y=None):
+    """plot low predicted values blue and high predicted values red"""
     figure = plt.figure(figsize=(27, 9))
-    cm = plt.cm.RdBu
-    cm_bright = ListedColormap(['#FF0000', '#0000FF'])
+    cm = plt.cm.RdBu.reversed()
+    cm_bright = ListedColormap(['#0000FF', '#FF0000'])
 
     i = 1
 

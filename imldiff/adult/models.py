@@ -28,10 +28,3 @@ class XGBoostModel(Model):
 
     def predict_proba(self, X):
         return self.model.predict_proba(X)[:,1]
-
-    def predict_log_odds(self, X):
-        return np.log(self._predict_odds(X))
-    
-    def _predict_odds(self, X):
-        probabilities = self.predict_proba(X)
-        return probabilities / (1 - probabilities)

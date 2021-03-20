@@ -1,18 +1,76 @@
+import copy
 import matplotlib.pyplot as plt
 from IPython.core.display import display
 import numpy as np
 import shap
 from sklearn.decomposition import PCA
+from imldiff.result import Result, merge_functions
 
 
-color_map = plt.cm.RdBu.reversed()
-color_map_bright = plt.cm.bwr
+figure_height = 7
+figure_width = 7
+
+color_map = copy.copy(plt.cm.get_cmap('RdBu').reversed())
+color_map.set_under('blue')
+color_map.set_over('red')
+color_map_bright = copy.copy(plt.cm.get_cmap('bwr'))
+color_map_bright.set_under('darkblue')
+color_map_bright.set_under('darkred')
 
 
-def plot_decision_boundaries(predict, X, y=None, ax=None, title=None):
+def plot_distributions(f, g, start, stop):
+    x = np.linspace(start, stop, 121)
+    result_f = Result('p_f', f(x))
+    result_g = Result('p_g', g(x))
+    num_figures = len(merge_functions) + 1
+    num_columns = 2
+    num_rows = int(np.ceil(num_figures/num_columns))
+    fig, axs = plt.subplots(num_rows, num_columns, figsize=(num_columns*figure_width, num_rows*figure_height))
+    plot_distribution(axs[0,0], x, result_f, result_g)
+    for func, ax in zip(merge_functions, axs.ravel()[1:]):
+        space = 'log-odds' if merge_returns_log_space(func) else 'proba'
+        plot_distribution(ax, x, func(result_f, result_g), space=space)
+    plt.show()
+
+
+def merge_returns_log_space(merge):
+    return merge.__name__.startswith('calculate_log_of_')
+
+
+def plot_distribution(ax, x, *results, space='proba', xlim_from=-1, xlim_to=1):
+    if space == 'log-odds':
+        ylim_from, ylim_to = -10, 10
+    else:
+        ylim_from, ylim_to = 0, 1
+    for i, result in enumerate(results, 1):
+        ax.plot(x, result.values, label=f'y{i}')
+    ax.grid()
+    ax.set_xlim(xlim_from, xlim_to)
+    ax.set_ylim(ylim_from, ylim_to)
+    ax.set_xlabel('x')
+    ax.set_title(' vs. '.join([str(result) for result in results]))
+    ax.legend()
+
+
+def plot_decision_boundaries(models, X, feature_names=None):
+    num_figures = len(models)
+    num_columns = 2
+    num_rows = int(np.ceil(num_figures/num_columns))
+    fig, axs = plt.subplots(num_rows, num_columns, figsize=(num_columns*(figure_width+2), num_rows*figure_height))
+    for model, ax in zip(models, axs.ravel()):
+        plot_decision_boundary(model, X, feature_names, fig, ax)
+
+
+def plot_decision_boundary(model, X, feature_names=None, fig=None, ax=None):
     """plot low predicted values blue and high predicted values red"""
+    result = model.predict(X)
+    y = result.values
+
+    vmin, vmax = get_display_range(model)
+    levels = np.linspace(vmin, vmax, 11)
+
     if not ax:
-        plt.figure(figsize=(9, 9))
+        fig = plt.figure(figsize=(figure_width, figure_height-2))
         ax = plt.subplot()
 
     h = .02  # step size in the mesh
@@ -24,7 +82,7 @@ def plot_decision_boundaries(predict, X, y=None, ax=None, title=None):
 
     # Plot the decision boundary. For that, we will assign a color to each
     # point in the mesh [x_min, x_max]x[y_min, y_max].
-    Z = predict(np.c_[xx.ravel(), yy.ravel()])
+    Z = model(np.c_[xx.ravel(), yy.ravel()])
 
     Z_filtered = Z[~np.isinf(Z) & ~np.isnan(Z)]
     if len(Z_filtered) > 0:
@@ -39,10 +97,11 @@ def plot_decision_boundaries(predict, X, y=None, ax=None, title=None):
 
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
-    ax.contourf(xx, yy, Z, cmap=color_map, alpha=.8)
+    cs = ax.contourf(xx, yy, Z, levels, cmap=color_map, alpha=.8)
+    fig.colorbar(cs, ax=ax, shrink=0.9, label=str(result))
 
     # Plot the points
-    ax.scatter(X[:, 0], X[:, 1], c=y, cmap=color_map_bright, edgecolors='k')
+    ax.scatter(X[:, 0], X[:, 1], c=y, cmap=color_map_bright, vmin=vmin, vmax=vmax, edgecolors='k')
 
     neginfs = np.isneginf(y)
     ax.scatter(X[neginfs, 0], X[neginfs, 1], c='c')
@@ -55,66 +114,49 @@ def plot_decision_boundaries(predict, X, y=None, ax=None, title=None):
 
     ax.set_xlim(xx.min(), xx.max())
     ax.set_ylim(yy.min(), yy.max())
-    ax.set_xticks(())
-    ax.set_yticks(())
-    ax.set_title(title)
+    ax.set_xlabel(feature_names[0])
+    ax.set_ylabel(feature_names[1])
+    ax.set_title(str(model))
 
 
-def plot_decision_boundaries_and_distributions(model, X):
-    num_figures_in_row = 2
-    fig, axs = plt.subplots(2, num_figures_in_row, figsize=(num_figures_in_row * 9, 9 + 3), gridspec_kw={'height_ratios': [3, 1]})
-    predict_functions = [model.predict_proba, model.predict_log_odds]
-    titles = [f'{model}', f'Log Odds {model}']
-    for i, (predict, title) in enumerate(zip(predict_functions, titles)):
-        Z = predict(X)
-        plot_decision_boundaries(predict, X, Z, axs[0, i], title)
-        Z_filtered = filter_nans_and_infinities(Z, model)
-        axs[1, i].hist(Z_filtered, bins=25, color='grey')
+def get_display_range(model):
+    if model.is_log_output_space():
+        return -10, 10
+    else:
+        return 0, 1
 
 
-def filter_nans_and_infinities(Z, model):
-    nans = np.isnan(Z)
-    nan_count = np.count_nonzero(nans)
-    posinfs = np.isposinf(Z)
-    posinf_count = np.count_nonzero(posinfs)
-    neginfs = np.isneginf(Z)
-    neginf_count = np.count_nonzero(neginfs)
-    if nan_count > 0 or posinf_count > 0 or neginf_count > 0:
-        print(f'{model}: Filtering {nan_count} NaNs, {posinf_count} infinities, {neginf_count} negative infinities')
-        return Z[~(nans | posinfs | neginfs)]
-    return Z
-
-
-def plot_shap_value_distribution(explainer):
-    shap.plots.beeswarm(explainer.shap_values, show=False)
-    plt.title(str(explainer))
+def plot_shap_value_distribution(explanation):
+    shap.plots.beeswarm(explanation.values, show=False)
+    plt.title(str(explanation))
+    plt.xlim((-1, 1))
     plt.show()
 
 
-def plot_shap_partial_dependence(explainer):
-    for feature_name in explainer.shap_values.feature_names:
-        shap_values = explainer.shap_values[:, feature_name]
-        shap.plots.scatter(shap_values, color=explainer.shap_values, title=str(explainer))
+def plot_shap_partial_dependence(explanation):
+    for feature_name in explanation.values.feature_names:
+        shap_values = explanation.values[:, feature_name]
+        shap.plots.scatter(shap_values, color=explanation.values, title=str(explanation), ymin=-1, ymax=1)
 
 
-def plot_shap_values_stacked(*explainers):
+def plot_shap_values_stacked(*explanations):
     ordering = None
-    for explainer in explainers:
+    for explanation in explanations:
         if not ordering:
-            plot = shap_force_plot(explainer)
+            plot = shap_force_plot(explanation)
             ordering = get_force_plot_ordering(plot)
         else:
-            plot = shap_force_plot(explainer, ordering)
+            plot = shap_force_plot(explanation, ordering)
         display(plot)
 
 
-def shap_force_plot(explainer, ordering=None, link='identity'):
+def shap_force_plot(explanation, ordering=None, link='identity'):
     return shap.plots.force(
-        base_value=explainer.shap_values.abs.mean(0).base_values,
-        shap_values=explainer.shap_values.values,
-        features=explainer.shap_values.display_data,
-        feature_names=explainer.shap_values.feature_names,
-        out_names=str(explainer),
+        base_value=explanation.values.values.mean(),
+        shap_values=explanation.values.values,
+        features=explanation.values.display_data,
+        feature_names=explanation.values.feature_names,
+        out_names=str(explanation),
         ordering_keys=ordering,
         link=link)
 
@@ -128,8 +170,8 @@ def make_pca_embedding_values(explainer):
     return pca.fit_transform(explainer.shap_values.values)
 
 
-def plot_shap_values_hierarchically_clustered(explainer):
-    shap.plots.heatmap(explainer.shap_values, max_display=explainer.shap_values.shape[1], show=False)
-    plt.gcf().set_size_inches(9, 9)
-    plt.title(str(explainer))
+def plot_shap_values_hierarchically_clustered(explanation):
+    shap.plots.heatmap(explanation.values, max_display=explanation.values.shape[1], show=False)
+    plt.gcf().set_size_inches(figure_width, figure_height)
+    plt.title(str(explanation))
     plt.show()

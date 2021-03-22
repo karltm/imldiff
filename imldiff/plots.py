@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from IPython.core.display import display
 import numpy as np
 import shap
+from matplotlib import ticker
 from sklearn.decomposition import PCA
 from imldiff.result import Result, merge_functions
 
@@ -18,26 +19,7 @@ color_map_bright.set_under('darkblue')
 color_map_bright.set_under('darkred')
 
 
-def plot_distributions(f, g, start, stop):
-    x = np.linspace(start, stop, 121)
-    result_f = Result('p_f', f(x))
-    result_g = Result('p_g', g(x))
-    num_figures = len(merge_functions) + 1
-    num_columns = 2
-    num_rows = int(np.ceil(num_figures/num_columns))
-    fig, axs = plt.subplots(num_rows, num_columns, figsize=(num_columns*figure_width, num_rows*figure_height))
-    plot_distribution(axs[0,0], x, result_f, result_g)
-    for func, ax in zip(merge_functions, axs.ravel()[1:]):
-        space = 'log-odds' if merge_returns_log_space(func) else 'proba'
-        plot_distribution(ax, x, func(result_f, result_g), space=space)
-    plt.show()
-
-
-def merge_returns_log_space(merge):
-    return merge.__name__.startswith('calculate_log_of_')
-
-
-def plot_distribution(ax, x, *results, space='proba', xlim_from=-1, xlim_to=1):
+def plot_distribution(ax, x, y, *results, space='proba', xlim_from=-1, xlim_to=1):
     if space == 'log-odds':
         ylim_from, ylim_to = -10, 10
     else:
@@ -61,22 +43,24 @@ def plot_decision_boundaries(models, X, feature_names=None):
         plot_decision_boundary(model, X, feature_names, fig, ax)
 
 
-def plot_decision_boundary(model, X, feature_names=None, fig=None, ax=None):
-    """plot low predicted values blue and high predicted values red"""
-    result = model.predict(X)
-    y = result.values
+def plot_decision_boundary(model, X, title=None, z_from=None, z_to=None, levels=None, feature_names=None, fig=None, ax=None):
+    h = .01  # step size in the mesh
 
-    vmin, vmax = get_display_range(model)
-    levels = np.linspace(vmin, vmax, 11)
+    if levels is None:
+        if z_from is not None and z_to is not None:
+            levels = np.linspace(z_from, z_to, 11)
+        else:
+            levels = 10
 
-    if not ax:
-        fig = plt.figure(figsize=(figure_width, figure_height-2))
+    if not fig or not ax:
+        fig = plt.figure(figsize=(9, 7))
         ax = plt.subplot()
 
-    h = .02  # step size in the mesh
+    z = model(X)
 
     x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
     y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5
+
     xx, yy = np.meshgrid(np.arange(x_min, x_max, h),
                          np.arange(y_min, y_max, h))
 
@@ -84,39 +68,20 @@ def plot_decision_boundary(model, X, feature_names=None, fig=None, ax=None):
     # point in the mesh [x_min, x_max]x[y_min, y_max].
     Z = model(np.c_[xx.ravel(), yy.ravel()])
 
-    Z_filtered = Z[~np.isinf(Z) & ~np.isnan(Z)]
-    if len(Z_filtered) > 0:
-        min_value = Z_filtered.min() - 1
-        max_value = Z_filtered.max() + 1
-    else:
-        min_value = 0
-        max_value = 1
-
-    Z[np.isneginf(Z)] = min_value
-    Z[np.isposinf(Z)] = max_value
-
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
     cs = ax.contourf(xx, yy, Z, levels, cmap=color_map, alpha=.8)
-    fig.colorbar(cs, ax=ax, shrink=0.9, label=str(result))
+    fig.colorbar(cs, ax=ax, shrink=0.9)
 
     # Plot the points
-    ax.scatter(X[:, 0], X[:, 1], c=y, cmap=color_map_bright, vmin=vmin, vmax=vmax, edgecolors='k')
-
-    neginfs = np.isneginf(y)
-    ax.scatter(X[neginfs, 0], X[neginfs, 1], c='c')
-
-    posinfs = np.isposinf(y)
-    ax.scatter(X[posinfs, 0], X[posinfs, 1], c='m')
-
-    nans = np.isnan(y)
-    ax.scatter(X[nans, 0], X[nans, 1], c='y')
+    ax.scatter(X[:, 0], X[:, 1], c=z, cmap=color_map_bright, vmin=z_from, vmax=z_to, edgecolors='k')
 
     ax.set_xlim(xx.min(), xx.max())
     ax.set_ylim(yy.min(), yy.max())
     ax.set_xlabel(feature_names[0])
     ax.set_ylabel(feature_names[1])
-    ax.set_title(str(model))
+    ax.set_title(title)
+    return cs.levels
 
 
 def get_display_range(model):

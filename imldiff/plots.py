@@ -3,13 +3,7 @@ import matplotlib.pyplot as plt
 from IPython.core.display import display
 import numpy as np
 import shap
-from matplotlib import ticker
 from sklearn.decomposition import PCA
-from imldiff.result import Result, merge_functions
-
-
-figure_height = 7
-figure_width = 7
 
 color_map = copy.copy(plt.cm.get_cmap('RdBu').reversed())
 color_map.set_under('blue')
@@ -38,23 +32,16 @@ def plot_functions(X, functions, title, xlabel, ylabel, xlim=None, ylim=None, ax
     ax.set_title(title)
 
 
-def plot_decision_boundaries(models, X, feature_names=None):
-    num_figures = len(models)
-    num_columns = 2
-    num_rows = int(np.ceil(num_figures/num_columns))
-    fig, axs = plt.subplots(num_rows, num_columns, figsize=(num_columns*(figure_width+2), num_rows*figure_height))
-    for model, ax in zip(models, axs.ravel()):
-        plot_decision_boundary(model, X, feature_names, fig, ax)
-
-
-def plot_decision_boundary(model, X, title=None, z_from=None, z_to=None, levels=None, feature_names=None, fig=None, ax=None):
+def plot_decision_boundary(model, X, title=None, feature_names=None, zlim=None, fig=None, ax=None):
     h = .01  # step size in the mesh
 
-    if levels is None:
-        if z_from is not None and z_to is not None:
-            levels = np.linspace(z_from, z_to, 20)
-        else:
-            levels = 20
+    if zlim is not None:
+        z_from, z_to = zlim
+        levels = np.linspace(z_from, z_to, 21)
+    else:
+        z_from = None
+        z_to = None
+        levels = 21
 
     if not fig or not ax:
         fig = plt.figure(figsize=(9, 7))
@@ -85,7 +72,6 @@ def plot_decision_boundary(model, X, title=None, z_from=None, z_to=None, levels=
     ax.set_xlabel(feature_names[0])
     ax.set_ylabel(feature_names[1])
     ax.set_title(title)
-    return cs.levels
 
 
 def get_display_range(model):
@@ -95,52 +81,53 @@ def get_display_range(model):
         return 0, 1
 
 
-def plot_shap_value_distribution(explanation):
-    shap.plots.beeswarm(explanation.values, show=False)
-    plt.title(str(explanation))
-    plt.xlim((-1, 1))
+def plot_shap_value_distribution(shap_values, title, xlim=None):
+    shap.plots.beeswarm(shap_values, show=False, plot_size=(14, 7))
+    plt.title(title)
+    if xlim:
+        plt.xlim(xlim[0], xlim[1])
     plt.show()
 
 
-def plot_shap_partial_dependence(explanation):
-    for feature_name in explanation.values.feature_names:
-        shap_values = explanation.values[:, feature_name]
-        shap.plots.scatter(shap_values, color=explanation.values, title=str(explanation), ymin=-1, ymax=1)
+def plot_shap_partial_dependence(shap_values, feature, title, ylim=None, ax=None):
+    ymin = None
+    ymax = None
+    if ylim is not None:
+        ymin, ymax = ylim
+    shap.plots.scatter(
+        shap_values[:, feature],
+        color=shap_values,
+        title=title,
+        ymin=ymin,
+        ymax=ymax,
+        ax=ax,
+        show=False if ax else True)
 
 
-def plot_shap_values_stacked(*explanations):
-    ordering = None
-    for explanation in explanations:
-        if not ordering:
-            plot = shap_force_plot(explanation)
-            ordering = get_force_plot_ordering(plot)
-        else:
-            plot = shap_force_plot(explanation, ordering)
-        display(plot)
+def plot_shap_values_stacked(shap_values, title, ordering=None):
+    plot = shap.plots.force(
+        base_value=0.0,
+        shap_values=shap_values.values,
+        features=shap_values.display_data,
+        feature_names=shap_values.feature_names,
+        out_names=title,
+        ordering_keys=ordering)
+    display(plot)
+    ordering = _get_force_plot_ordering(plot)
+    return ordering
 
 
-def shap_force_plot(explanation, ordering=None, link='identity'):
-    return shap.plots.force(
-        base_value=explanation.values.values.mean(),
-        shap_values=explanation.values.values,
-        features=explanation.values.display_data,
-        feature_names=explanation.values.feature_names,
-        out_names=str(explanation),
-        ordering_keys=ordering,
-        link=link)
-
-
-def get_force_plot_ordering(plot):
+def _get_force_plot_ordering(plot):
     return list(map(lambda x: int(x['simIndex']), plot.data['explanations']))
 
 
-def make_pca_embedding_values(explainer):
+def make_pca_embedding_values(shap_values):
     pca = PCA(2)
-    return pca.fit_transform(explainer.shap_values.values)
+    return pca.fit_transform(shap_values.values)
 
 
-def plot_shap_values_hierarchically_clustered(explanation):
-    shap.plots.heatmap(explanation.values, max_display=explanation.values.shape[1], show=False)
-    plt.gcf().set_size_inches(figure_width, figure_height)
-    plt.title(str(explanation))
+def plot_shap_values_hierarchically_clustered(shap_values, title):
+    shap.plots.heatmap(shap_values, max_display=shap_values.shape[1], show=False)
+    plt.gcf().set_size_inches(7, 7)
+    plt.title(title)
     plt.show()

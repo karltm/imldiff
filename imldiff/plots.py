@@ -64,8 +64,15 @@ def plot_decision_boundary(model, X, title=None, feature_names=None, zlim=None, 
     cs = ax.contourf(xx, yy, Z, levels, cmap=color_map, alpha=.8)
     fig.colorbar(cs, ax=ax, shrink=0.9)
 
+    ax.contourf(xx, yy, np.where(np.isposinf(Z), 1, None), colors='pink')
+    ax.contourf(xx, yy, np.where(np.isneginf(Z), 1, None), colors='turquoise')
+    ax.contourf(xx, yy, np.where(np.isnan(Z), 1, None), colors='lightyellow')
+
     # Plot the points
     ax.scatter(X[:, 0], X[:, 1], c=z, cmap=color_map_bright, vmin=z_from, vmax=z_to, edgecolors='k')
+    ax.scatter(X[np.isneginf(z),0], X[np.isneginf(z),1], c='blue')
+    ax.scatter(X[np.isposinf(z),0], X[np.isposinf(z),1], c='red')
+    ax.scatter(X[np.isnan(z),0], X[np.isnan(z),1], c='yellow')
 
     ax.set_xlim(xx.min(), xx.max())
     ax.set_ylim(yy.min(), yy.max())

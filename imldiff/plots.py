@@ -19,19 +19,23 @@ color_map_bright.set_under('darkblue')
 color_map_bright.set_under('darkred')
 
 
-def plot_distribution(ax, x, y, *results, space='proba', xlim_from=-1, xlim_to=1):
-    if space == 'log-odds':
-        ylim_from, ylim_to = -10, 10
-    else:
-        ylim_from, ylim_to = 0, 1
-    for i, result in enumerate(results, 1):
-        ax.plot(x, result.values, label=f'y{i}')
+def plot_functions(X, functions, title, xlabel, ylabel, xlim=None, ylim=None, ax=None):
+    if not ax:
+        fig, ax = plt.subplots(1, 1, figsize=(7, 7))
+    if callable(functions):
+        ax.plot(X[:,0], functions(X))
+    elif isinstance(functions, dict):
+        for label, func in functions.items():
+            ax.plot(X[:,0], func(X), label=label)
+        ax.legend()
     ax.grid()
-    ax.set_xlim(xlim_from, xlim_to)
-    ax.set_ylim(ylim_from, ylim_to)
-    ax.set_xlabel('x')
-    ax.set_title(' vs. '.join([str(result) for result in results]))
-    ax.legend()
+    if xlim is not None:
+        ax.set_xlim(xlim[0], xlim[1])
+    if ylim is not None:
+        ax.set_ylim(ylim[0], ylim[1])
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
 
 
 def plot_decision_boundaries(models, X, feature_names=None):
@@ -48,9 +52,9 @@ def plot_decision_boundary(model, X, title=None, z_from=None, z_to=None, levels=
 
     if levels is None:
         if z_from is not None and z_to is not None:
-            levels = np.linspace(z_from, z_to, 11)
+            levels = np.linspace(z_from, z_to, 20)
         else:
-            levels = 10
+            levels = 20
 
     if not fig or not ax:
         fig = plt.figure(figsize=(9, 7))

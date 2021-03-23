@@ -1,3 +1,3 @@
-export PYTHONPATH=$PWD
+export PYTHONPATH=$PWD/imldiff
 jupyter lab
 

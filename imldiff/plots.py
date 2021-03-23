@@ -32,7 +32,7 @@ def plot_functions(X, functions, title, xlabel, ylabel, xlim=None, ylim=None, ax
     ax.set_title(title)
 
 
-def plot_decision_boundary(model, X, title=None, feature_names=None, zlim=None, fig=None, ax=None):
+def plot_decision_boundary(model, X, title=None, feature_names=None, zlim=None, fig=None, ax=None, z=None):
     h = .01  # step size in the mesh
 
     if zlim is not None:
@@ -47,7 +47,8 @@ def plot_decision_boundary(model, X, title=None, feature_names=None, zlim=None, 
         fig = plt.figure(figsize=(9, 7))
         ax = plt.subplot()
 
-    z = model(X)
+    if z is None:
+        z = model(X)
 
     x_min, x_max = X[:, 0].min() - .5, X[:, 0].max() + .5
     y_min, y_max = X[:, 1].min() - .5, X[:, 1].max() + .5

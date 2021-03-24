@@ -113,16 +113,20 @@ def plot_shap_partial_dependence(shap_values, feature, title, ylim=None, ax=None
 
 
 def plot_shap_values_stacked(shap_values, title, ordering=None):
-    plot = shap.plots.force(
-        base_value=0.0,
-        shap_values=shap_values.values,
-        features=shap_values.display_data,
-        feature_names=shap_values.feature_names,
-        out_names=title,
-        ordering_keys=ordering)
-    display(plot)
-    ordering = _get_force_plot_ordering(plot)
-    return ordering
+    try:
+        plot = shap.plots.force(
+            base_value=0.0,
+            shap_values=shap_values.values,
+            features=shap_values.display_data,
+            feature_names=shap_values.feature_names,
+            out_names=title,
+            ordering_keys=ordering)
+        display(plot)
+        ordering = _get_force_plot_ordering(plot)
+        return ordering
+    except ValueError as e:
+        print('Omitting plot because of ValueError: ' + str(e))
+        return None
 
 
 def _get_force_plot_ordering(plot):
@@ -135,7 +139,10 @@ def make_pca_embedding_values(shap_values):
 
 
 def plot_shap_values_hierarchically_clustered(shap_values, title):
-    shap.plots.heatmap(shap_values, max_display=shap_values.shape[1], show=False)
-    plt.gcf().set_size_inches(7, 7)
-    plt.title(title)
-    plt.show()
+    try:
+        shap.plots.heatmap(shap_values, max_display=shap_values.shape[1], show=False)
+        plt.gcf().set_size_inches(7, 7)
+        plt.title(title)
+        plt.show()
+    except ValueError as e:
+        print('Omitting plot because of ValueError: ' + str(e))

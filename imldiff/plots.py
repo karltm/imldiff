@@ -6,11 +6,7 @@ import shap
 from sklearn.decomposition import PCA
 
 color_map = copy.copy(plt.cm.get_cmap('RdBu').reversed())
-color_map.set_under('blue')
-color_map.set_over('red')
 color_map_bright = copy.copy(plt.cm.get_cmap('bwr'))
-color_map_bright.set_under('darkblue')
-color_map_bright.set_under('darkred')
 
 
 def plot_functions(X, functions, title, xlabel, ylabel, xlim=None, ylim=None, ax=None):
@@ -62,7 +58,7 @@ def plot_decision_boundary(model, X, title=None, feature_names=None, zlim=None, 
 
     # Put the result into a color plot
     Z = Z.reshape(xx.shape)
-    cs = ax.contourf(xx, yy, Z, levels, cmap=color_map, alpha=.8)
+    cs = ax.contourf(xx, yy, Z, levels, cmap=color_map, alpha=.8, extend='both')
     fig.colorbar(cs, ax=ax, shrink=0.9)
 
     ax.contourf(xx, yy, np.where(np.isposinf(Z), 1, None), colors='pink')

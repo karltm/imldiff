@@ -137,9 +137,9 @@ def make_pca_embedding_values(shap_values):
     return pca.fit_transform(shap_values.values)
 
 
-def shap_heatmap(shap_values, title):
+def shap_heatmap(shap_values, title, feature_order=None):
     try:
-        shap.plots.heatmap(shap_values, max_display=shap_values.shape[1], show=False)
+        shap.plots.heatmap(shap_values, max_display=shap_values.shape[1], feature_order=feature_order, show=False)
         plt.gcf().set_size_inches(7, 7)
         plt.title(title)
         plt.show()

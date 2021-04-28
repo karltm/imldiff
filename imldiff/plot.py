@@ -10,17 +10,11 @@ color_map = copy.copy(plt.cm.get_cmap('RdBu').reversed())
 color_map_bright = copy.copy(plt.cm.get_cmap('bwr'))
 
 
-def functions_1d(X, *models, method='proba', xlim=None, ylim=None, ax=None):
+def functions_1d(X, *functions, title=None, xlim=None, ylim=None, ax=None):
     if not ax:
         fig, ax = plt.subplots(1, 1, figsize=(7, 7))
-    for i, model in enumerate(models, 1):
-        if method == 'log_odds':
-            predict = model.predict_log_odds
-        elif method == 'log_proba':
-            predict = model.predict_log_proba
-        else:
-            predict = model.predict_proba
-        ax.plot(X[:, 0], predict(X)[:, 1], label=f'y{i}')
+    for i, function in enumerate(functions, 1):
+        ax.plot(X[:, 0], function(X), label=f'y{i}')
     ax.legend()
     ax.grid()
     if xlim is not None:
@@ -29,8 +23,8 @@ def functions_1d(X, *models, method='proba', xlim=None, ylim=None, ax=None):
         ax.set_ylim(ylim[0], ylim[1])
     ax.set_xlabel('x')
     ax.set_ylabel('y')
-    if len(models) == 1:
-        ax.set_title(str(models[0]))
+    if title:
+        ax.set_title(title)
 
 
 def decision_boundary_2d(model, X, title=None, feature_names=None, zlim=None, fig=None, ax=None, z=None):

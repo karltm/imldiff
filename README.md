@@ -29,7 +29,7 @@ On windows, set `PYTHONPATH` to the imldiff directory before starting jupyter se
 
 ## Theory
 
-Using interpretability methods, we can understand how a machine learning model behaves. By merging the output of two classifiers $A$ and $B$ and treating it as a special classification problem, we can also apply interpretability methods on that. The following approaches will be investigated at first, when the two classifiers $A$ and $B$ are restricted to binary classifiers:
+Using interpretability methods, we can understand how a machine learning model behaves. By merging the output of two classifiers _A_ and _B_ and treating it as a special classification problem, we can also apply interpretability methods on that. The following approaches will be investigated at first, when the two classifiers _A_ and _B_ are restricted to binary classifiers:
 
 1. Binary classification problem: `both classifiers agree` vs. `both classifiers disagree`
 2. Three-class classification problem: `both classifiers agree`,  `A predicts the positive class and B the negative`, `B predicts positive and A negative`

@@ -8,24 +8,39 @@ NOTE: It's still work-in-progress, and notebooks demonstrate the proposed approa
 
 ### Requirements
 - Python 3.9
-- Package `shap` requires llvm version 8, 9 or 10
-  - on Mac, install with: `brew install llvm@9 && echo 'export PATH="/usr/local/opt/llvm@9/bin:$PATH"' >> ~/.zshrc`
+- Package `shap` requires llvm
+  - on Mac OS, install with: `brew install llvm@12` and add to PATH variable
 - Package `xgboost` requires LLVM's OpenMP runtime library (optional)
-  - on Mac, install with: `brew install libomp`
+  - on Mac OS, install with: `brew install libomp`
 
 ### Install
-TODO: instructions for setting it up in venv
+It's easiest to install in a new virtual environment. Create a new one with your python 3.9:
+
+```
+python -m venv .venv
+```
+
+Activate the virtual environment:
+```
+source .venv/bin/activate
+```
+
+And install the required packages:
 ```
 pip install -r requirements.txt
 ```
 
 ### Run notebook server
-On unix-based systems, run in project's root directory:
+
+Make sure you have activated the virtual environment and set the PYTHONPATH environment variable, that the notebooks have access to the scripts inside it:
 ```
-./start.sh
+export PYTHONPATH=$PWD/imldiff
 ```
 
-On windows, set `PYTHONPATH` to the imldiff directory before starting jupyter server.
+And start the jupyter server:
+```
+jupyter lab
+```
 
 ## Theory
 

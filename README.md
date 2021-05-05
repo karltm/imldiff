@@ -4,7 +4,7 @@ Here I host code and notebooks I'm using in my master's thesis to explain differ
 
 NOTE: It's still work-in-progress, and notebooks demonstrate the proposed approaches for binary classifiers only currently.
 
-## Quickstart
+## Usage
 
 ### Requirements
 - Python 3.9
@@ -30,9 +30,11 @@ And install the required packages:
 pip install -r requirements.txt
 ```
 
+Afterwards, run all commands in this environment. To deactivate, run `deactivate`.
+
 ### Run notebook server
 
-Make sure you have activated the virtual environment and set the PYTHONPATH environment variable, that the notebooks have access to the scripts inside it:
+First, set the PYTHONPATH environment variable, that the notebooks have access to the scripts inside it:
 ```
 export PYTHONPATH=$PWD/imldiff
 ```
@@ -40,6 +42,12 @@ export PYTHONPATH=$PWD/imldiff
 And start the jupyter server:
 ```
 jupyter lab
+```
+
+### Run tests
+
+```
+python test.py
 ```
 
 ## Theory

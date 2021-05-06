@@ -2,7 +2,9 @@
 
 Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using SHAP values. Mainly I'm using the python package [shap](https://github.com/slundberg/shap) and scikit-learn.
 
-NOTE: It's still work-in-progress, and notebooks demonstrate the proposed approaches for binary classifiers only currently.
+NOTE: It's still work-in-progress. Currently only the following notebooks make use of the most recent version of the difference classifiers, other notebooks use a slightly different approach that will be updated soon.
+
+- [synthetic/2d_horizontally_separable/moved_decision_rule](https://github.com/MasterKarl/imldiff/tree/main/imldiff/notebooks/synthetic/2d_horizontally_separable/moved_decision_rule)
 
 ## Usage
 

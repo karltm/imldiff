@@ -66,7 +66,12 @@ Using interpretability methods, we can understand how a machine learning model b
 2. Three-class classification problem: `both classifiers agree`,  `A predicts the positive class and B the negative`, `B predicts positive and A negative`
 3. Four-class classification problem: `A and B predict the positive class`, `A and B predict the negative class`, `A predicts the positive class and B the negative`, `B predicts positive and A negative`
 
-SHAP-values can be generated for the actually predicted labels, the predicted probabilities or log-odds if the classifiers support that. Care should be taken whether probabilities or log-odds are explained if the classifiers support both, e.g. [logistic regression models are better explained using log-odds](https://shap.readthedocs.io/en/latest/example_notebooks/overviews/An%20introduction%20to%20explainable%20AI%20with%20Shapley%20values.html).
+SHAP-values can be generated for, depending on the classifier:
+- the actually predicted labels
+- the predicted probabilities
+- or log-odds
+
+The latter two provide more pronounced results, because they take the uncertainty of the classifiers into account. Care should be taken whether probabilities or log-odds are explained if the classifiers support both, e.g. [logistic regression models are better explained using log-odds](https://shap.readthedocs.io/en/latest/example_notebooks/overviews/An%20introduction%20to%20explainable%20AI%20with%20Shapley%20values.html).
 
 Afterwards, I'll extend the approaches to explain differences between two multiclass classifiers.
 
@@ -74,7 +79,7 @@ Afterwards, I'll extend the approaches to explain differences between two multic
 
 SHAP values explain specific instances, but can be aggregated or their entire distribution visualized. I'll use them to:
 
-- Explain the importance of the features for the observed differences, by aggregating them (TODO see figure 1) or plotting the distribution in a scatter plot
+- Explain the importance of the features for the observed differences, by aggregating them or plotting the distribution in a scatter plot
 - Explain the marginal effect of a feature for the observed differences using SHAP dependence plots, similar to the partial dependence plots proposed by Friedman (Friedman, Jerome H. "Greedy function approximation: a gradient boosting machine." _Annals of statistics_ (2001): 1189-1232.)
 - Cluster instances with similar SHAP values
 

@@ -7,14 +7,14 @@ NOTE: It's still work-in-progress, and notebooks demonstrate the proposed approa
 ## Usage
 
 ### Requirements
-- Python 3.9
+- Python 3.9 (other versions untested)
 - Package `shap` requires llvm
   - on Mac OS, install with: `brew install llvm@12` and add to PATH variable
 - Package `xgboost` requires LLVM's OpenMP runtime library (optional)
   - on Mac OS, install with: `brew install libomp`
 
 ### Install
-It's easiest to install in a new virtual environment. Create a new one with your python 3.9:
+It's easiest to install in a new virtual environment. Create one with your python 3.9 executable:
 
 ```
 python -m venv .venv
@@ -34,7 +34,7 @@ Afterwards, run all commands in this environment. To deactivate, run `deactivate
 
 ### Run notebook server
 
-First, set the PYTHONPATH environment variable, that the notebooks have access to the scripts inside it:
+First, set the PYTHONPATH environment variable, that the notebooks have access to the scripts:
 ```
 export PYTHONPATH=$PWD/imldiff
 ```

@@ -18,7 +18,7 @@ class RuleClassifier(BaseEstimator, ClassifierMixin):
          self.decision_rule = decision_rule
 
     def fit(self, X, y):
-        X, y = check_X_y(X, y) 
+        X, y = check_X_y(X, y)
         self.classes_ = unique_labels(y)
         return self
 
@@ -28,5 +28,13 @@ class RuleClassifier(BaseEstimator, ClassifierMixin):
         result = np.apply_along_axis(self.decision_rule, 1, X)
         y = np.take(self.classes_, result.astype(int))
         return y
+    
+    def predict_proba(self, X):
+        check_is_fitted(self)
+        X = check_array(X)
+        indices = np.apply_along_axis(self.decision_rule, 1, X).astype(int)
+        proba = np.reshape(np.repeat(0.0, len(self.classes_) * X.shape[0]), (len(self.classes_), X.shape[0])).T
+        proba[np.arange(X.shape[0]), indices] = 1.0
+        return proba
 
 

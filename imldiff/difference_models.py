@@ -28,18 +28,22 @@ complement_log_proba = lambda log_proba: np.log1p(-np.exp(log_proba))
         
 
 class TwoClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
-    """Classifier that classifies whether the passed base classifiers
-       predict the same class (True) or a different class (False)"""
+    """
+    Classifier that classifies whether the passed base classifiers
+    predict the same class (True) or a different class (False)
+    """
    
-    def  __init__(self, clf_a, clf_b):
+    def  __init__(self, clf_a, clf_b, fit_base_classifiers=False):
         self.clf_a = clf_a
         self.clf_b = clf_b
+        self.fit_base_classifiers = fit_base_classifiers
 
     def fit(self, X, y):
         X, y = check_X_y(X, y)
         self.classes_ = [False, True]
-        self.clf_a.fit(X, y)
-        self.clf_b.fit(X, y)
+        if self.fit_base_classifiers:
+            self.clf_a.fit(X, y)
+            self.clf_b.fit(X, y)
         return self
 
     def predict(self, X):
@@ -94,17 +98,20 @@ class NClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
     y_A(x) = l3 | 6    7    8
     """
     
-    def  __init__(self, clf_a, clf_b):
+    def  __init__(self, clf_a, clf_b, fit_base_classifiers=False):
         self.clf_a = clf_a
         self.clf_b = clf_b
+        self.fit_base_classifiers = fit_base_classifiers
 
     def fit(self, X, y):
         X, y = check_X_y(X, y) 
         self.base_classes = unique_labels(y)
         self.n_base_classes = len(self.base_classes)
-        self.classes_ = np.array([range(np.square(self.n_base_classes))])
-        self.clf_a.fit(X, y)
-        self.clf_b.fit(X, y)
+        self.classes_ = np.arange(np.square(self.n_base_classes))
+        self.class_tuples = list(itertools.product(self.base_classes, self.base_classes))
+        if self.fit_base_classifiers:
+            self.clf_a.fit(X, y)
+            self.clf_b.fit(X, y)
         return self
 
     def predict(self, X):

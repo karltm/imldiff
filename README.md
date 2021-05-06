@@ -81,4 +81,4 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 
 ## Feedback
 
-I'd be glad to hear from your experiences with these tools or just any thoughts on it, especially if you're using it for university assignments 🙂
+I'd be glad to hear from your experiences with these tools or just any thoughts on it, especially if you're using it for university assignments 🙂 Either directly on github, or by mail to e1426356@student.tuwien.ac.at

@@ -7,10 +7,10 @@ NOTE: It's still work-in-progress. Currently only the following notebooks make u
 - [synthetic/2d_horizontally_separable/moved_decision_rule](https://github.com/MasterKarl/imldiff/tree/main/imldiff/notebooks/synthetic/2d_horizontally_separable/moved_decision_rule)
 
 The structure of the notebooks for a specific task is always the same:
-1. creates the data set and the base models, and checks the performance
-2. compares the predictions of the models using classical methods
-3. generates SHAP values for each of the base models and tries to compare them side-by-side or with subtraction.  I consider this the state-of-the art approach. There may be separate notebooks that make use of either the predicted labels only, the predicted probabilities or the log-odds (logit) of the predicted probabilities.
-4. generates SHAP values for the difference model(s) to explain the models' differences directly. Again, there may be several notebooks that use a different type of prediction.
+1. Create the data set and the base models, and checks the performance
+2. Compare the predictions of the models using classical methods
+3. Generate SHAP values for each of the base models and tries to compare them side-by-side or with subtraction.  I consider this the state-of-the art approach. There may be separate notebooks that make use of either the predicted labels only, the predicted probabilities or the log-odds (logit) of the predicted probabilities.
+4. Generate SHAP values for the difference model(s) to explain the models' differences directly. Again, there may be several notebooks that use a different type of prediction.
 
 ## Usage
 

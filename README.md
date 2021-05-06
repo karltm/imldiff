@@ -79,3 +79,6 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 - Cluster instances with similar SHAP values
 
 
+## Feedback
+
+I'd be glad to hear from your experiences with these tools or just any thoughts on it, especially if you're using it for university assignments 🙂

@@ -1,9 +1,9 @@
 import numpy as np
 import shap
-
-def reduce_nclass_proba_shap_values(shap_values):
+    
+def reduce_multiclass_proba_diff_shap_values(shap_values):
     """
-    Reduce multiclass difference model SHAP-values to binary class diffference SHAP-values
+    Reduce multiclass difference model SHAP-values to binary class difference SHAP-values
     assuming they where generated on probability estimates of the base models
     """
     n_diff_classes = shap_values.values.shape[2]

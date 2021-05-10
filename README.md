@@ -2,9 +2,10 @@
 
 Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using SHAP values. Mainly I'm using the python package [shap](https://github.com/slundberg/shap) and scikit-learn.
 
-NOTE: It's still work-in-progress. Currently only the following notebooks make use of the most recent version of the difference classifiers, other notebooks use a slightly different approach that will be updated soon. Furthermore there are no notebooks yet to demonstrate the concept for non-binary base classifiers.
+NOTE: It's still work-in-progress. Currently only the following notebooks make use of the most recent version of the difference classifiers, other notebooks use a slightly different approach that will be updated soon. Furthermore, they demonstrate the concept with binary base classifiers only.
 
 - [synthetic/2d_horizontally_separable/moved_decision_rule](https://github.com/MasterKarl/imldiff/tree/main/imldiff/notebooks/synthetic/2d_horizontally_separable/moved_decision_rule)
+- [synthetic/1d_linearly_separable/moved_logistic_regression](https://github.com/MasterKarl/imldiff/tree/main/imldiff/notebooks/synthetic/1d_linearly_separable/moved_logistic_regression)
 
 The structure of the notebooks for a specific task is always the same:
 1. Create the data set and the base models, and checks the performance

@@ -27,28 +27,24 @@ np_add_in_log_proba_space = np.frompyfunc(add_in_log_proba_space, 2, 1)
 complement_log_proba = lambda log_proba: np.log1p(-np.exp(log_proba))
         
 
-class TwoClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
+class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
     """
     Classifier that classifies whether the passed base classifiers
     predict the same class (True) or a different class (False)
     """
    
-    def  __init__(self, clf_a, clf_b, fit_base_classifiers=False):
+    def  __init__(self, clf_a, clf_b):
         self.clf_a = clf_a
         self.clf_b = clf_b
-        self.fit_base_classifiers = fit_base_classifiers
 
     def fit(self, X, y):
         X, y = check_X_y(X, y)
-        self.classes_ = [False, True]
-        if self.fit_base_classifiers:
-            self.clf_a.fit(X, y)
-            self.clf_b.fit(X, y)
+        self.classes_ = np.array([False, True])
         return self
 
     def predict(self, X):
         """
-        Predict class labels, output shape is (n_samples,)
+        Predict class labels, output shape is (n,)
         """
         check_is_fitted(self)
         X = check_array(X)
@@ -58,8 +54,7 @@ class TwoClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         """
-        Predict probabilities for the two class labels.
-        Output shape is (n_samples, 2)
+        Predict probabilities for the two classes, the output shape is (n, 2)
         """
         check_is_fitted(self)
         X = check_array(X)
@@ -70,8 +65,8 @@ class TwoClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_log_proba(self, X):
         """
-        Predict log-probabilities instead of probabilities
-        Output shape is (n_samples, n_labels)
+        Predict log-probabilities instead of probabilities for the two classes,
+        the output shape is (n, 2)
         """
         check_is_fitted(self)
         X = check_array(X)

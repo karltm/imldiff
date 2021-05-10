@@ -81,42 +81,54 @@ class TwoClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         return np.vstack((complement_log_proba(log_proba_pos), log_proba_pos)).T
 
 
-class NClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
+class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
     """
-    Classifier that merges the the predictions of the passed base
-    classifiers into a flattened version of a confusion matrix
-    of the predictions of A and B. The diagonal labels are the cases
-    where both classifiers predict the same label, the other where
-    they predict differing labels.
+    Reformulates the classification problem to classify into m^2 difference classes,
+    m being the number of base classes in the base classification problem.
+    
+    They can be visualized in a m x m matrix with the corresponding class labels l_1, l_2, ... l_m,
+    where the diagonal contains classes where the base classifiers predict equal classes:
+    clf_b(x) = l_1     l_2     ...     l_m
+    clf_a(x) = ---------------------------
+      l_1    |  0       1      ...      m
+      l_2    | m+1     m+2     ...     2*m
+      ...    |
+      l_m    | m^2-m  m^2-m+1  ...     m^2
+      
+    For binary base classification problems this results in a 4-class difference classifier:
+    clf_b(x) = False True
+    clf_a(x) = ----------
+      False  |  0     1
+      True   |  2     3
+      
+    And for 3-class base classification problems this results in a 9-class difference classifier:
+    clf_b(x) = l_1 l_2 l_3
+    clf_a(x) = -----------
+      l_1    |  0   1   2
+      l_2    |  3   4   5
+      l_3    |  6   7   8
 
-    e.g. for a base classification problem consisting of three labels,
-    this classifier predicts 9 different labels
-         y_B(x) = l1 | l2 | l3
-                  ------------
-    y_A(x) = l1 | 0    1    2 
-    y_A(x) = l2 | 3    4    5
-    y_A(x) = l3 | 6    7    8
+    Initialize with already fitted base classifiers. After fitting the difference classifier,
+    the following variables are available:
+    - `base_classes`: numpy array of the base classes [l_1, l_2, ... l_m]
+    - `classes_`: numpy array of the difference classes [0, 1, ... (m-1)^2]
+    - `class_tuples: list of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
     """
     
-    def  __init__(self, clf_a, clf_b, fit_base_classifiers=False):
+    def  __init__(self, clf_a, clf_b):
         self.clf_a = clf_a
         self.clf_b = clf_b
-        self.fit_base_classifiers = fit_base_classifiers
 
     def fit(self, X, y):
         X, y = check_X_y(X, y) 
         self.base_classes = unique_labels(y)
-        self.n_base_classes = len(self.base_classes)
-        self.classes_ = np.arange(np.square(self.n_base_classes))
+        self.classes_ = np.arange(np.square(len(self.base_classes)))
         self.class_tuples = list(itertools.product(self.base_classes, self.base_classes))
-        if self.fit_base_classifiers:
-            self.clf_a.fit(X, y)
-            self.clf_b.fit(X, y)
         return self
 
     def predict(self, X):
         """
-        Predict class labels, output shape is (n_samples,)
+        Predict difference class labels, the output shape is (n,).
         """
         check_is_fitted(self)
         X = check_array(X)
@@ -128,28 +140,27 @@ class NClassDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         """
-        Predict probabilities for the n class labels.
-        Output shape is (n_samples, n_labels)
+        Predict probabilities for the difference classes, the output shape is (n, m)
         """
         check_is_fitted(self)
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
-        proba_a_expanded = np.repeat(proba_a, self.n_base_classes, axis=1)
-        proba_b_expanded = np.reshape(np.repeat(proba_b, self.n_base_classes, axis=0), proba_a_expanded.shape)
+        proba_a_expanded = np.repeat(proba_a, len(self.base_classes), axis=1)
+        proba_b_expanded = np.reshape(np.repeat(proba_b, len(self.base_classes), axis=0), proba_a_expanded.shape)
         return proba_a_expanded * proba_b_expanded
         
     def predict_log_proba(self, X):
         """
-        Predict log-probabilities instead of probabilities
-        Output shape is (n_samples, n_labels)
+        Predict log-probabilities instead of probabilities for the difference classes,
+        the output shape is (n, m)
         """
         check_is_fitted(self)
         X = check_array(X)
         log_proba_a = predict_log_proba(self.clf_a, X)
         log_proba_b = predict_log_proba(self.clf_b, X)
-        log_proba_a_expanded = np.repeat(log_proba_a, self.n_base_classes, axis=1)
-        log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, self.n_base_classes, axis=0), log_proba_a_expanded.shape)
+        log_proba_a_expanded = np.repeat(log_proba_a, len(self.base_classes), axis=1)
+        log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, len(self.base_classes), axis=0), log_proba_a_expanded.shape)
         return log_proba_a_expanded + log_proba_b_expanded
 
     

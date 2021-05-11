@@ -18,8 +18,8 @@ def reduce_multiclass_proba_diff_shap_values(shap_values):
                             display_data=shap_values.display_data,
                             feature_names=shap_values.feature_names)
 
-def make_predict_one_hot_encoded_labels(n_classes, predict):
-    return lambda X: np.eye(n_classes)[predict(X)]
+def encode_one_hot(labels, n_classes):
+    return np.eye(n_classes)[labels]
 
 def calc_binary_log_odds_from_log_proba(log_proba):
     return log_proba[:, 1] - log_proba[:, 0]

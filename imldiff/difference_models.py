@@ -6,13 +6,6 @@ import numpy as np
 from scipy.special import logsumexp
 
 
-def predict_log_proba(clf, X):
-    if hasattr(clf, 'predict_log_proba'):
-        return clf.predict_log_proba(X)
-    else:
-        proba = clf.predict_proba(X)
-        return np.log(proba)
-
 complement_log_proba = lambda log_proba: np.log1p(-np.exp(log_proba))
 
 
@@ -59,8 +52,8 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         """
         check_is_fitted(self)
         X = check_array(X)
-        log_proba_a = predict_log_proba(self.clf_a, X)
-        log_proba_b = predict_log_proba(self.clf_b, X)
+        log_proba_a = self.clf_a.predict_log_proba(X)
+        log_proba_b = self.clf_b.predict_log_proba(X)
         log_proba_pos = logsumexp(log_proba_a + log_proba_b, axis=1)
         return np.vstack((complement_log_proba(log_proba_pos), log_proba_pos)).T
 
@@ -141,8 +134,8 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         """
         check_is_fitted(self)
         X = check_array(X)
-        log_proba_a = predict_log_proba(self.clf_a, X)
-        log_proba_b = predict_log_proba(self.clf_b, X)
+        log_proba_a = self.clf_a.predict_log_proba(X)
+        log_proba_b = self.clf_b.predict_log_proba(X)
         log_proba_a_expanded = np.repeat(log_proba_a, len(self.base_classes), axis=1)
         log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, len(self.base_classes), axis=0), log_proba_a_expanded.shape)
         return log_proba_a_expanded + log_proba_b_expanded

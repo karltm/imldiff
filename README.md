@@ -2,16 +2,15 @@
 
 Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using SHAP values. Mainly I'm using the python package [shap](https://github.com/slundberg/shap) and scikit-learn.
 
-NOTE: It's still work-in-progress. Currently only the following notebooks make use of the most recent version of the difference classifiers, other notebooks use a slightly different approach that will be updated soon. Furthermore, they demonstrate the concept with binary base classifiers only.
+Please see the demo notebooks in `imldiff/notebooks` for how to use the difference models.
 
-- [synthetic/2d_horizontally_separable/moved_decision_rule](https://github.com/MasterKarl/imldiff/tree/main/imldiff/notebooks/synthetic/2d_horizontally_separable/moved_decision_rule)
-- [synthetic/1d_linearly_separable/moved_logistic_regression](https://github.com/MasterKarl/imldiff/tree/main/imldiff/notebooks/synthetic/1d_linearly_separable/moved_logistic_regression)
+The structure of the notebooks is always the same:
+1. Create the data set and the base models and check the performance.
+2. Compare the predictions of the models using classical methods.
+3. Generate SHAP-values for each of the base models and compare them side-by-side and by subtracting the SHAP-values of A from those of B. I consider this the state-of-the art approach.
+4. Generate SHAP values for the difference models. 
 
-The structure of the notebooks for a specific task is always the same:
-1. Create the data set and the base models, and checks the performance
-2. Compare the predictions of the models using classical methods
-3. Generate SHAP values for each of the base models and tries to compare them side-by-side or with subtraction.  I consider this the state-of-the art approach. There may be separate notebooks that make use of either the predicted labels only, the predicted probabilities or the log-odds (logit) of the predicted probabilities.
-4. Generate SHAP values for the difference model(s) to explain the models' differences directly. Again, there may be several notebooks that use a different type of prediction.
+If the classifiers support probability estimates, there are additional notebooks that use SHAP-values generated for probabilities and log-odds.
 
 ## Usage
 

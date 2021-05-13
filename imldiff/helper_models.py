@@ -38,3 +38,7 @@ class RuleClassifier(BaseEstimator, ClassifierMixin):
         return proba
 
 
+class LogProbabilityMixin:
+    
+    def predict_log_proba(self, X):
+        return np.log(self.predict_proba(X))

@@ -2,7 +2,7 @@
 
 Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using SHAP values. Mainly I'm using the python package [shap](https://github.com/slundberg/shap) and scikit-learn.
 
-Please see the demo notebooks in `imldiff/notebooks` for how to use the difference models.
+Please see the demo notebooks for how to use the difference models.
 
 The structure of the notebooks is always the same:
 1. Create the data set and the base models and check the performance.
@@ -44,7 +44,7 @@ Afterwards, run all commands in this environment. To deactivate, run `deactivate
 
 First, set the PYTHONPATH environment variable, that the notebooks have access to the scripts:
 ```
-export PYTHONPATH=$PWD/imldiff
+export PYTHONPATH=$PWD
 ```
 
 And start the jupyter server:

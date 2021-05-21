@@ -2,7 +2,7 @@
 
 Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using SHAP values. Mainly I'm using the python package [shap](https://github.com/slundberg/shap) and scikit-learn.
 
-Please see the demo notebooks for how to use the difference models.
+Please see the demo notebooks for how to use the difference models. To visualize them directly in your browser, go to https://nbviewer.jupyter.org/github/MasterKarl/imldiff/tree/main/notebooks/.
 
 The structure of the notebooks is always the same:
 1. Create the data set and the base models and check the performance.

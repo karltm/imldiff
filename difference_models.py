@@ -12,14 +12,18 @@ complement_log_proba = lambda log_proba: np.log1p(-np.exp(log_proba))
 class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
     """
     Classifier that classifies whether the passed base classifiers
-    predict the same class (True) or a different class (False)
+    predict the same class (False) or a different class (True)
     """
    
-    def  __init__(self, clf_a, clf_b):
+    def  __init__(self, clf_a, clf_b, fit_classifiers=False):
         self.clf_a = clf_a
         self.clf_b = clf_b
+        self.fit_classifiers = fit_classifiers
 
     def fit(self, X, y):
+        if self.fit_classifiers:
+            self.clf_a.fit(X, y)
+            self.clf_b.fit(X, y)
         X, y = check_X_y(X, y)
         self.classes_ = np.array([False, True])
         return self
@@ -32,7 +36,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         X = check_array(X)
         pred_a = self.clf_a.predict(X)
         pred_b = self.clf_b.predict(X)
-        return pred_a == pred_b
+        return pred_a != pred_b
 
     def predict_proba(self, X):
         """
@@ -43,7 +47,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
         proba_pos = np.sum(proba_a * proba_b, axis=1)
-        return np.vstack((1-proba_pos, proba_pos)).T
+        return np.vstack((proba_pos, 1-proba_pos)).T
 
     def predict_log_proba(self, X):
         """
@@ -55,7 +59,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         log_proba_a = self.clf_a.predict_log_proba(X)
         log_proba_b = self.clf_b.predict_log_proba(X)
         log_proba_pos = logsumexp(log_proba_a + log_proba_b, axis=1)
-        return np.vstack((complement_log_proba(log_proba_pos), log_proba_pos)).T
+        return np.vstack((log_proba_pos, complement_log_proba(log_proba_pos))).T
 
 
 class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
@@ -85,22 +89,27 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
       l_2    |  3   4   5
       l_3    |  6   7   8
 
-    Initialize with already fitted base classifiers. After fitting the difference classifier,
-    the following variables are available:
+    After fitting, the following variables are available:
     - `base_classes`: numpy array of the base classes [l_1, l_2, ... l_m]
     - `classes_`: numpy array of the difference classes [0, 1, ... (m-1)^2]
-    - `class_tuples: list of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
+    - `class_tuples: numpy array of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
     """
     
-    def  __init__(self, clf_a, clf_b):
+    def  __init__(self, clf_a, clf_b, fit_classifiers=False):
         self.clf_a = clf_a
         self.clf_b = clf_b
+        self.fit_classifiers = fit_classifiers
 
     def fit(self, X, y):
+        if self.fit_classifiers:
+            self.clf_a.fit(X, y)
+            self.clf_b.fit(X, y)
+        if not np.array_equal(self.clf_a.classes_, self.clf_b.classes_):
+            raise Exception(f'Classes do not match: clf_a={self.clf_a.classes_}, clf_b={self.clf_a.classes_}')
         X, y = check_X_y(X, y) 
         self.base_classes = unique_labels(y)
         self.classes_ = np.arange(np.square(len(self.base_classes)))
-        self.class_tuples = list(itertools.product(self.base_classes, self.base_classes))
+        self.class_tuples = np.array(list(itertools.product(self.base_classes, self.base_classes)), dtype='object,object').astype(object)
         return self
 
     def predict(self, X):

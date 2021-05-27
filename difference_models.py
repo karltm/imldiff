@@ -90,10 +90,19 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
       l_3    |  6   7   8
 
     After fitting, the following variables are available:
-    - `base_classes`: numpy array of the base classes [l_1, l_2, ... l_m]
-    - `classes_`: numpy array of the difference classes [0, 1, ... (m-1)^2]
-    - `class_tuples: numpy array of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
+    - `base_classes_`: numpy array of the base classes [l_1, l_2, ... l_m]
+    - `classes_`: numpy array of the equality and difference classes [0, 1, ... (m-1)^2]
+    - `equality_classes_`: numpy array of the equality classes,
+                           the diagonal elements of `classes_`, if reshaped as a m x m matrix
+    - `difference_classes_`: numpy array of the difference classes
+    - `class_tuples_: numpy array of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
     """
+    
+    @property
+    def equality_classes():
+        n_base_classes = np.sqrt(n_diff_classes).astype(int)
+        class_matrix = np.arange(n_diff_classes).reshape((n_base_classes, n_base_classes))
+        return np.diagonal(class_matrix)
     
     def  __init__(self, clf_a, clf_b, fit_classifiers=False):
         self.clf_a = clf_a
@@ -107,9 +116,11 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         if not np.array_equal(self.clf_a.classes_, self.clf_b.classes_):
             raise Exception(f'Classes do not match: clf_a={self.clf_a.classes_}, clf_b={self.clf_a.classes_}')
         X, y = check_X_y(X, y) 
-        self.base_classes = unique_labels(y)
-        self.classes_ = np.arange(np.square(len(self.base_classes)))
-        self.class_tuples = np.array(list(itertools.product(self.base_classes, self.base_classes)), dtype='object,object').astype(object)
+        self.base_classes_ = unique_labels(y)
+        self.classes_ = np.arange(np.square(len(self.base_classes_)))
+        self.equality_classes_ = np.diagonal(self.classes_.reshape((len(self.base_classes_), len(self.base_classes_))))
+        self.difference_classes_ = np.setdiff1d(self.classes_, self.equality_classes_)
+        self.class_tuples_ = np.array(list(itertools.product(self.base_classes_, self.base_classes_)), dtype='object,object').astype(object)
         return self
 
     def predict(self, X):
@@ -120,9 +131,9 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         X = check_array(X)
         pred_a = self.clf_a.predict(X)
         pred_b = self.clf_b.predict(X)
-        pred_a_idx = np.searchsorted(self.base_classes, pred_a)
-        pred_b_idx = np.searchsorted(self.base_classes, pred_b)
-        return pred_a_idx * len(self.base_classes) + pred_b_idx
+        pred_a_idx = np.searchsorted(self.base_classes_, pred_a)
+        pred_b_idx = np.searchsorted(self.base_classes_, pred_b)
+        return pred_a_idx * len(self.base_classes_) + pred_b_idx
 
     def predict_proba(self, X):
         """
@@ -132,8 +143,8 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
-        proba_a_expanded = np.repeat(proba_a, len(self.base_classes), axis=1)
-        proba_b_expanded = np.reshape(np.repeat(proba_b, len(self.base_classes), axis=0), proba_a_expanded.shape)
+        proba_a_expanded = np.repeat(proba_a, len(self.base_classes_), axis=1)
+        proba_b_expanded = np.reshape(np.repeat(proba_b, len(self.base_classes_), axis=0), proba_a_expanded.shape)
         return proba_a_expanded * proba_b_expanded
         
     def predict_log_proba(self, X):
@@ -145,8 +156,8 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)
         log_proba_b = self.clf_b.predict_log_proba(X)
-        log_proba_a_expanded = np.repeat(log_proba_a, len(self.base_classes), axis=1)
-        log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, len(self.base_classes), axis=0), log_proba_a_expanded.shape)
+        log_proba_a_expanded = np.repeat(log_proba_a, len(self.base_classes_), axis=1)
+        log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, len(self.base_classes_), axis=0), log_proba_a_expanded.shape)
         return log_proba_a_expanded + log_proba_b_expanded
 
     

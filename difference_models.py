@@ -98,12 +98,6 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
     - `class_tuples_: numpy array of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
     """
     
-    @property
-    def equality_classes():
-        n_base_classes = np.sqrt(n_diff_classes).astype(int)
-        class_matrix = np.arange(n_diff_classes).reshape((n_base_classes, n_base_classes))
-        return np.diagonal(class_matrix)
-    
     def  __init__(self, clf_a, clf_b, fit_classifiers=False):
         self.clf_a = clf_a
         self.clf_b = clf_b
@@ -159,6 +153,4 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         log_proba_a_expanded = np.repeat(log_proba_a, len(self.base_classes_), axis=1)
         log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, len(self.base_classes_), axis=0), log_proba_a_expanded.shape)
         return log_proba_a_expanded + log_proba_b_expanded
-
-    
     

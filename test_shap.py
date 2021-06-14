@@ -1,5 +1,4 @@
 import unittest
-
 import numpy as np
 import shap
 from shap.maskers import Independent, Partition
@@ -42,27 +41,101 @@ class PermutationExplainerTestCase(unittest.TestCase):
 
     def test_explainer_creation_single_output_model(self):
         X, f, feature_names = make_single_output_classification()
-        masker = Independent(X)
-        explainer = shap.Explainer(f, masker, algorithm='permutation', feature_names=feature_names)
+        explainer = self.make_explainer(X, None, f, feature_names)
         self.assertEqual(explainer.feature_names, feature_names)
 
-    def test_explainer_creation_multioutput_model_forgets_class_names(self):
-        X, class_names, f, feature_names = make_multiclass_classification()
+    def make_explainer(self, X, class_names, f, feature_names):
         masker = Independent(X)
-        explainer = shap.Explainer(f, masker, algorithm='permutation', feature_names=feature_names, output_names=class_names)
+        explainer = shap.Explainer(f, masker, algorithm='permutation', feature_names=feature_names,
+                                   output_names=class_names)
+        return explainer
+
+    def test_explainer_creation_multioutput_model_forgets_class_names(self):
+        """ This test demonstrates a bug in shap package.
+
+        see make_multioutput_shap_values for a fix
+        """
+        X, class_names, f, feature_names = make_multiclass_classification()
+        explainer = self.make_explainer(X, class_names, f, feature_names)
         self.assertEqual(explainer.feature_names, feature_names)
         self.assertNotEqual(explainer.output_names, class_names)
+
+    def test_shap_value_generation_single_output_model_should_succeed(self):
+        X, feature_names, shap_values = self.make_single_output_shap_values()
+        self.assertEqual(shap_values.shape, (X.shape[0], len(feature_names)))
+        self.assertEqual(shap_values.feature_names, feature_names)
+        self.assertEqual(shap_values.output_names, None)
+
+    def make_single_output_shap_values(self):
+        X, f, feature_names = make_single_output_classification()
+        explainer = self.make_explainer(X, None, f, feature_names)
+        shap_values = explainer(X)
+        return X, feature_names, shap_values
+
+    def test_shap_value_generation_multioutput_model_shoud_succeed(self):
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
+        self.assertEqual(shap_values.shape, (X.shape[0], len(feature_names), len(class_names)))
+        self.assertEqual(shap_values.feature_names, feature_names)
+        self.assertEqual(shap_values.output_names, class_names)
+
+    def make_multioutput_shap_values(self):
+        """ As a workaround, a new shap.Explanation object is created with the correct class names"""
+        X, class_names, f, feature_names = make_multiclass_classification()
+        explainer = self.make_explainer(X, class_names, f, feature_names)
+        shap_values = explainer(X)
+        shap_values = shap.Explanation(shap_values.values, shap_values.base_values, shap_values.data,
+                                       shap_values.display_data, shap_values.instance_names, shap_values.feature_names,
+                                       class_names)
+        return X, class_names, feature_names, shap_values
+
+    def test_slice_instances_single_output_model_shap_values_should_succeed(self):
+        X, feature_names, shap_values = self.make_single_output_shap_values()
+        shap_value_slice = shap_values[2:5]
+        self.assertEqual(shap_value_slice.shape, (3, len(feature_names)))
+
+    def test_slice_instances_multioutput_model_shap_values_should_succeed(self):
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
+        shap_value_slice = shap_values[2:5]
+        self.assertEqual(shap_value_slice.shape, (3, len(feature_names), len(class_names)))
+
+    def test_slice_features_multioutput_model_shap_values_should_succeed(self):
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
+        shap_value_slice = shap_values[:, ['x2', 'x1'], :]
+        self.assertEqual(shap_value_slice.shape, (X.shape[0], 2, len(class_names)))
+        self.assertEqual(shap_value_slice.feature_names, ['x2', 'x1'])
+        self.assertEqual(shap_value_slice.output_names, class_names)
+
+    def test_slice_single_feature_multioutput_model_shap_values_should_succeed(self):
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
+        shap_value_slice = shap_values[:, 'x2', :]
+        self.assertEqual(shap_value_slice.shape, (X.shape[0], len(class_names)))
+        self.assertEqual(shap_value_slice.feature_names, 'x2')
+        self.assertEqual(shap_value_slice.output_names, class_names)
+
+    def test_slice_classes_multioutput_model_shap_values_should_succeed(self):
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
+        shap_value_slice = shap_values[:, :, ['c2', 'c1']]
+        self.assertEqual(shap_value_slice.shape, (X.shape[0], len(feature_names), 2))
+        self.assertEqual(shap_value_slice.feature_names, feature_names)
+        self.assertEqual(shap_value_slice.output_names, ['c2', 'c1'])
+
+    def test_slice_single_class_multioutput_model_shap_values_should_succeed(self):
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
+        shap_value_slice = shap_values[:, :, 'c1']
+        self.assertEqual(shap_value_slice.shape, (X.shape[0], len(feature_names)))
+        self.assertEqual(shap_value_slice.feature_names, feature_names)
+        self.assertEqual(shap_value_slice.output_names, 'c1')
 
 
 class PartitionExplainerTestCase(unittest.TestCase):
 
     def test_explainer_creation_single_output_model(self):
         X, f, feature_names = make_single_output_classification()
-        explainer = self.make_partition_explainer(X, None, f, feature_names)
+        explainer = self.make_explainer(X, None, f, feature_names)
         self.assertEqual(explainer.feature_names, feature_names)
         self.assertEqual(explainer.output_names, None)
 
-    def make_partition_explainer(self, X, class_names, f, feature_names):
+    def make_explainer(self, X, class_names, f, feature_names):
         masker = Partition(X)
         explainer = shap.Explainer(f, masker, algorithm='partition', feature_names=feature_names,
                                    output_names=class_names)
@@ -70,67 +143,67 @@ class PartitionExplainerTestCase(unittest.TestCase):
 
     def test_explainer_creation_multioutput_model_should_succeed(self):
         X, class_names, f, feature_names = make_multiclass_classification()
-        explainer = self.make_partition_explainer(X, class_names, f, feature_names)
+        explainer = self.make_explainer(X, class_names, f, feature_names)
         self.assertEqual(explainer.feature_names, feature_names)
         self.assertEqual(explainer.output_names, class_names)
 
     def test_shap_value_generation_single_output_model_should_succeed(self):
-        X, feature_names, shap_values = self.make_single_output_shap_values_from_partition_explainer()
+        X, feature_names, shap_values = self.make_single_output_shap_values()
         self.assertEqual(shap_values.shape, (X.shape[0], len(feature_names)))
         self.assertEqual(shap_values.feature_names, feature_names)
         self.assertEqual(shap_values.output_names, None)
 
-    def make_single_output_shap_values_from_partition_explainer(self):
+    def make_single_output_shap_values(self):
         X, f, feature_names = make_single_output_classification()
-        explainer = self.make_partition_explainer(X, None, f, feature_names)
+        explainer = self.make_explainer(X, None, f, feature_names)
         shap_values = explainer(X)
         return X, feature_names, shap_values
 
     def test_shap_value_generation_multioutput_model_shoud_succeed(self):
-        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values_from_partition_explainer()
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
         self.assertEqual(shap_values.shape, (X.shape[0], len(feature_names), len(class_names)))
         self.assertEqual(shap_values.feature_names, feature_names)
         self.assertEqual(shap_values.output_names, class_names)
 
-    def make_multioutput_shap_values_from_partition_explainer(self):
+    def make_multioutput_shap_values(self):
         X, class_names, f, feature_names = make_multiclass_classification()
-        explainer = self.make_partition_explainer(X, class_names, f, feature_names)
+        explainer = self.make_explainer(X, class_names, f, feature_names)
         shap_values = explainer(X)
         return X, class_names, feature_names, shap_values
 
     def test_slice_instances_single_output_model_shap_values_should_succeed(self):
-        X, feature_names, shap_values = self.make_single_output_shap_values_from_partition_explainer()
+        X, feature_names, shap_values = self.make_single_output_shap_values()
         shap_value_slice = shap_values[2:5]
         self.assertEqual(shap_value_slice.shape, (3, len(feature_names)))
 
     def test_slice_instances_multioutput_model_shap_values_should_succeed(self):
-        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values_from_partition_explainer()
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
         shap_value_slice = shap_values[2:5]
         self.assertEqual(shap_value_slice.shape, (3, len(feature_names), len(class_names)))
 
     def test_slice_features_multioutput_model_shap_values_should_succeed(self):
-        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values_from_partition_explainer()
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
         shap_value_slice = shap_values[:, ['x2', 'x1'], :]
         self.assertEqual(shap_value_slice.shape, (X.shape[0], 2, len(class_names)))
         self.assertEqual(shap_value_slice.feature_names, ['x2', 'x1'])
         self.assertEqual(shap_value_slice.output_names, class_names)
 
     def test_slice_single_feature_multioutput_model_shap_values_should_succeed(self):
-        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values_from_partition_explainer()
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
         shap_value_slice = shap_values[:, 'x2', :]
         self.assertEqual(shap_value_slice.shape, (X.shape[0], len(class_names)))
         self.assertEqual(shap_value_slice.feature_names, 'x2')
         self.assertEqual(shap_value_slice.output_names, class_names)
 
     def test_slice_classes_multioutput_model_shap_values_should_succeed(self):
-        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values_from_partition_explainer()
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
         shap_value_slice = shap_values[:, :, ['c2', 'c1']]
         self.assertEqual(shap_value_slice.shape, (X.shape[0], len(feature_names), 2))
         self.assertEqual(shap_value_slice.feature_names, feature_names)
         self.assertEqual(shap_value_slice.output_names, ['c2', 'c1'])
 
     def test_slice_single_class_multioutput_model_shap_values_should_succeed(self):
-        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values_from_partition_explainer()
+        X, class_names, feature_names, shap_values = self.make_multioutput_shap_values()
         shap_value_slice = shap_values[:, :, 'c1']
         self.assertEqual(shap_value_slice.shape, (X.shape[0], len(feature_names)))
         self.assertEqual(shap_value_slice.feature_names, feature_names)

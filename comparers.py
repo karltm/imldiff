@@ -55,12 +55,17 @@ class ModelComparer:
         return [clf.predict for clf in self.classifiers]
     
     @property
+    def predict_one_hot_functions(self):
+        n_base_classes = len(self.base_classes)
+        return [lambda X, f=f: encode_one_hot(f(X), n_base_classes) for f in self.predict_functions]
+    
+    @property
     def predict_proba_functions(self):
         return [clf.predict_proba for clf in self.classifiers]
     
     @property
     def predict_log_odds_functions(self):
-        return [lambda X: calc_log_odds_from_log_proba(clf.predict_log_proba(X))
+        return [lambda X, clf=clf: calc_log_odds_from_log_proba(clf.predict_log_proba(X))
                 for clf in self.classifiers]
     
     @property
@@ -78,6 +83,11 @@ class ModelComparer:
     @property
     def predict_mclass_diff(self):
         return self.mclass_diff_clf.predict
+    
+    @property
+    def predict_mclass_diff_one_hot(self):
+        n_classes = len(self.classes)
+        return lambda X: encode_one_hot(self.predict_mclass_diff(X), n_classes)
     
     @property
     def predict_mclass_diff_proba(self):

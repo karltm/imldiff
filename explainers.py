@@ -4,7 +4,7 @@ from shap.maskers import Independent
 from shap.utils import hclust_ordering
 import numpy as np
 import pickle
-from util import encode_one_hot, reduce_multiclass_proba_diff_shap_values, \
+from util import reduce_multiclass_proba_diff_shap_values, \
                  calc_binary_log_odds_from_log_proba, calc_log_odds_from_log_proba
 import warnings
 import functools
@@ -16,12 +16,12 @@ from plots import plot_2d, plot_2d_mclass, plot_feature_importance_bar, plot_fea
 from collections.abc import Iterable
 
 
-def generate(comparer, X, X_display=None, masker=None,
-        kinds=['indiv-labels', 'indiv-proba', 'indiv-log-odds',
-               'indiv-diff-labels', 'indiv-diff-proba', 'indiv-diff-log-odds',
-               'bin-diff-labels', 'bin-diff-proba', 'bin-diff-log-odds',
-               'mclass-diff-labels', 'mclass-diff-proba', 'mclass-diff-log-odds'],
-        **kwargs):
+supported_kinds = ['indiv-labels', 'indiv-proba', 'indiv-log-odds',
+                   'indiv-diff-labels', 'indiv-diff-proba', 'indiv-diff-log-odds',
+                   'bin-diff-labels', 'bin-diff-proba', 'bin-diff-log-odds',
+                   'mclass-diff-labels', 'mclass-diff-proba', 'mclass-diff-log-odds']
+
+def generate(comparer, X, X_display=None, masker=None, kind='all', kinds=None, **kwargs):
     """ Generate shap values for all given kinds
 
     X_display : data to use for plots
@@ -29,6 +29,13 @@ def generate(comparer, X, X_display=None, masker=None,
     kwargs : additional arguments are passed to shap.Explainer
              e.g. algorithm='permutation'
     """
+    if kind is not None and kinds is None:
+        if kind == 'all':
+            kinds = supported_kinds
+        elif kind == 'labels':
+            kinds = list(filter(lambda s: 'labels' in s, supported_kinds))
+        elif kind == 'labels,proba':
+            kinds = list(filter(lambda s: 'labels' in s or 'proba' in s, supported_kinds))
     instance_names = np.arange(X.shape[0])
     tasks = _make_tasks(kinds, comparer)
     instance_names, X, X_display = _filter_instances_with_nonfinite_predictions(tasks, instance_names, X, X_display)
@@ -48,16 +55,13 @@ def _make_tasks( kinds, comparer):
 
 def _make_predict_tuples(kind, comparer):
     if kind == 'indiv-labels':
-        n_classes = len(comparer.base_classes)
-        functions = [lambda X: encode_one_hot(f(X), n_classes) for f in comparer.predict_functions]
-        return zip([kind + '-a', kind + '-b'], functions)
+        return zip([kind + '-a', kind + '-b'], comparer.predict_one_hot_functions)
     if kind == 'indiv-proba':
         return zip([kind + '-a', kind + '-b'], comparer.predict_proba_functions)
     if kind == 'indiv-log-odds':
         return zip([kind + '-a', kind + '-b'], comparer.predict_log_odds_functions)
     if kind == 'indiv-diff-labels':
-        n_classes = len(comparer.base_classes)
-        return [(kind, lambda X: np.subtract(*[encode_one_hot(f(X), n_classes) for f in comparer.predict_functions]))]
+        return [(kind, lambda X: np.subtract(*[f(X) for f in comparer.predict_one_hot_functions]))]
     if kind == 'indiv-diff-proba':
         return [(kind, lambda X: np.subtract(*[f(X) for f in comparer.predict_proba_functions]))]
     if kind == 'indiv-diff-log-odds':
@@ -69,9 +73,7 @@ def _make_predict_tuples(kind, comparer):
     if kind == 'bin-diff-log-odds':
         return [(kind, comparer.predict_bin_diff_log_odds)]
     if kind == 'mclass-diff-labels':
-        n_classes = len(comparer.classes)
-        f = lambda X: encode_one_hot(comparer.predict_mclass_diff(X), n_classes)
-        return [(kind, f)]
+        return [(kind, comparer.predict_mclass_diff_one_hot)]
     if kind == 'mclass-diff-proba':
         return [(kind, comparer.predict_mclass_diff_proba)]
     if kind == 'mclass-diff-log-odds':

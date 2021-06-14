@@ -66,7 +66,7 @@ requests==2.25.1
 scikit-learn==0.24.2
 scipy==1.6.3
 Send2Trash==1.5.0
-shap==0.39.0
+shap @ git+https://github.com/slundberg/shap.git@d0b4d59f96adc5d067586c0dd4f7f2326532c47a
 six==1.15.0
 slicer==0.0.7
 sniffio==1.2.0

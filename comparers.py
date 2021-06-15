@@ -29,6 +29,10 @@ class ModelComparer:
     @property
     def base_classes(self):
         return self.mclass_diff_clf.base_classes_
+
+    @property
+    def base_class_names(self):
+        return np.array([str(label) for label in self.base_classes])
     
     @property
     def is_binary_classification_task(self):
@@ -41,14 +45,26 @@ class ModelComparer:
     @property
     def class_tuples(self):
         return self.mclass_diff_clf.class_tuples_
+
+    @property
+    def class_names(self):
+        return np.array([str(label) for label in self.class_tuples])
     
     @property
     def difference_classes(self):
         return self.mclass_diff_clf.difference_classes_
+
+    @property
+    def difference_class_names(self):
+        return self.class_names[self.difference_classes]
     
     @property
     def equality_classes(self):
         return self.mclass_diff_clf.equality_classes_
+
+    @property
+    def equality_class_names(self):
+        return self.class_names[self.equality_classes]
     
     @property
     def predict_functions(self):
@@ -56,17 +72,28 @@ class ModelComparer:
     
     @property
     def predict_one_hot_functions(self):
-        n_base_classes = len(self.base_classes)
-        return [lambda X, f=f: encode_one_hot(f(X), n_base_classes) for f in self.predict_functions]
+        return [lambda X, f=f: encode_one_hot(f(X), self.base_classes) for f in self.predict_functions]
+    
+    @property
+    def predict_one_hot_combined(self):
+        return lambda X: np.hstack([f(X) for f in self.predict_one_hot_functions])
     
     @property
     def predict_proba_functions(self):
         return [clf.predict_proba for clf in self.classifiers]
     
     @property
+    def predict_proba_combined(self):
+        return lambda X: np.hstack([f(X) for f in self.predict_proba_functions])
+    
+    @property
     def predict_log_odds_functions(self):
         return [lambda X, clf=clf: calc_log_odds_from_log_proba(clf.predict_log_proba(X))
                 for clf in self.classifiers]
+    
+    @property
+    def predict_log_odds_combined(self):
+        return lambda X: np.hstack([f(X) for f in self.predict_log_odds_functions])
     
     @property
     def predict_bin_diff(self):
@@ -86,8 +113,7 @@ class ModelComparer:
     
     @property
     def predict_mclass_diff_one_hot(self):
-        n_classes = len(self.classes)
-        return lambda X: encode_one_hot(self.predict_mclass_diff(X), n_classes)
+        return lambda X: encode_one_hot(self.predict_mclass_diff(X), self.classes)
     
     @property
     def predict_mclass_diff_proba(self):
@@ -99,9 +125,6 @@ class ModelComparer:
 
     def plot_individual_clf_decision_boundaries(self, X, X_display=None, y_true=None, separate=False,
                                                 kind='label', idx_x=0, idx_y=1, **kwargs):
-        if X_display is None:
-            X_display = X
-        
         zlim = None
         class_names = None
         if kind == 'label':
@@ -110,7 +133,7 @@ class ModelComparer:
             if not separate:
                 fig, axs = plt.subplots(ncols=2, sharey=True, figsize=(2*7, 7), constrained_layout=True)
                 for predict, title, ax in zip(predict_functions, ['$c_A(X)$', '$c_B(X)$'], axs):
-                    plot_decision_boundary(X, y_true, title, self.feature_names,
+                    plot_decision_boundary(X, y_true, title, self.feature_names, X_display,
                                            predict=predict, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
@@ -123,7 +146,7 @@ class ModelComparer:
                     masks = [y_pred == label for label in self.mclass_diff_clf.base_classes_]
                     for mask, ax in zip(masks, axs_row):
                         plot_decision_boundary(X[mask, :], y_true[mask] if y_true is not None else None,
-                                               title, self.feature_names,
+                                               title, self.feature_names, X_display[mask, :] if X_display is not None else None,
                                                predict=predict, class_names=class_names, zlim=zlim,
                                                idx_x=idx_x, idx_y=idx_y,
                                                fig=fig, ax=ax, **kwargs)
@@ -149,15 +172,13 @@ class ModelComparer:
             for predict, title, axs_row in zip(predict_functions, ['$c_A(X)$', '$c_B(X)$'], axs.T):
                 for class_idx, ax in zip(plot_classes, axs_row.flatten()):
                     predict_class = lambda X: predict(X)[:, class_idx]
-                    plot_decision_boundary(X, y_true, title, self.feature_names,
+                    plot_decision_boundary(X, y_true, title, self.feature_names, X_display,
                                            predict=predict_class, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
         fig.suptitle('Base classification task with decision boundaries of the classifiers', fontsize='x-large')
         
     def plot_decision_boundaries(self, X, X_display=None, kind='label', separate=False, idx_x=0, idx_y=1, **kwargs):
-        if X_display is None:
-            X_display = X
         if kind == 'label':
             binary_label_diff = self.predict_bin_diff(X)
             label_diff = self.predict_mclass_diff(X)
@@ -178,7 +199,7 @@ class ModelComparer:
                                        binary_label_diff[mask],
                                        'Labels different',
                                        self.feature_names,
-                                       X_display=X_display[mask],
+                                       X_display=X_display[mask] if X_display is not None else None,
                                        predict=self.predict_bin_diff,
                                        class_names=self.bin_diff_clf.classes_,
                                        fig=fig, ax=axs[0],
@@ -187,9 +208,9 @@ class ModelComparer:
                                        label_diff[mask],
                                        'Difference classes for predicted labels',
                                        self.feature_names,
-                                       X_display=X_display[mask],
+                                       X_display=X_display[mask] if X_display is not None else None,
                                        predict=self.predict_mclass_diff,
-                                       class_names=self.mclass_diff_clf.class_tuples_,
+                                       class_names=self.class_names,
                                        fig=fig, ax=axs[1],
                                        idx_x=idx_x, idx_y=idx_y, **kwargs)
         else:

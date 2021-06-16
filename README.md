@@ -4,21 +4,13 @@ Here I host code and notebooks I'm using in my master's thesis to explain differ
 
 Please see the demo notebooks for how to use the difference models. To visualize them directly in your browser, go to https://nbviewer.jupyter.org/github/MasterKarl/imldiff/tree/main/notebooks/.
 
-The structure of the notebooks is always the same:
-1. Create the data set and the base models and check the performance.
-2. Compare the predictions of the models using classical methods.
-3. Generate SHAP-values for each of the base models and compare them side-by-side and by subtracting the SHAP-values of A from those of B. I consider this the state-of-the art approach.
-4. Generate SHAP values for the difference models. 
-
-If the classifiers support probability estimates, there are additional notebooks that use SHAP-values generated for probabilities and log-odds.
-
 ## Usage
 
 ### Requirements
-- Python 3.9 (other versions untested)
-- Package `shap` requires llvm
+- Python 3.9
+- llvm (required by shap package)
   - on Mac OS, install with: `brew install llvm@12` and add to PATH variable
-- Package `xgboost` requires LLVM's OpenMP runtime library (optional)
+- LLVM's OpenMP runtime library (required by xgboost package which is used in certain notebooks)
   - on Mac OS, install with: `brew install libomp`
 
 ### Install
@@ -55,7 +47,7 @@ jupyter lab
 ### Run tests
 
 ```
-python test.py
+python -m unittest
 ```
 
 ## Theory
@@ -63,8 +55,7 @@ python test.py
 Using interpretability methods, we can understand how a machine learning model behaves. By merging the output of two classifiers _A_ and _B_ and treating it as a special classification problem, we can also apply interpretability methods on that. The following approaches will be investigated at first, when the two classifiers _A_ and _B_ are restricted to binary classifiers:
 
 1. Binary classification problem: `both classifiers agree` vs. `both classifiers disagree`
-2. Three-class classification problem: `both classifiers agree`,  `A predicts the positive class and B the negative`, `B predicts positive and A negative`
-3. Four-class classification problem: `A and B predict the positive class`, `A and B predict the negative class`, `A predicts the positive class and B the negative`, `B predicts positive and A negative`
+2. Four-class classification problem: `A and B predict the positive class`, `A and B predict the negative class`, `A predicts the positive class and B the negative`, `B predicts positive and A negative`
 
 SHAP-values can be generated for, depending on the classifier:
 - the actually predicted labels
@@ -82,8 +73,3 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 - Explain the importance of the features for the observed differences, by aggregating them or plotting the distribution in a scatter plot
 - Explain the marginal effect of a feature for the observed differences using SHAP dependence plots, similar to the partial dependence plots proposed by Friedman (Friedman, Jerome H. "Greedy function approximation: a gradient boosting machine." _Annals of statistics_ (2001): 1189-1232.)
 - Cluster instances with similar SHAP values
-
-
-## Feedback
-
-I'd be glad to hear from your experiences with these tools or just any thoughts on it, especially if you're using it for university assignments 🙂 Either directly on github, or by mail to e1426356@student.tuwien.ac.at

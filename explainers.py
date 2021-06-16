@@ -1,6 +1,6 @@
 from sklearn.decomposition import PCA
 import shap
-from shap.maskers import Partition
+from shap.maskers import Independent
 import numpy as np
 import warnings
 from types import SimpleNamespace
@@ -42,7 +42,8 @@ class VariousTypeExplanationsNamespace(SliceableNamespace):
         return next(iter(self.__dict__.values())).display_data
 
 
-def generate_shap_explanations(comparer, X, X_display=None, explanation_types=None, space_types=None):
+def generate_shap_explanations(comparer, X, X_display=None, explanation_types=None, space_types=None,
+                               algorithm='auto', masker=None):
     if space_types is None:
         space_types = ['labels', 'proba', 'log_odds']
     if explanation_types is None:
@@ -51,7 +52,7 @@ def generate_shap_explanations(comparer, X, X_display=None, explanation_types=No
         raise Exception('Cannot calculate shap value differences without the individual models\' shap values')
 
     instance_names = np.arange(X.shape[0])
-    explainers = _make_shap_explainers(explanation_types, space_types, comparer, X)
+    explainers = _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm, masker)
     instance_names, X, X_display = _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, X_display)
     explanations = VariousTypeExplanationsNamespace()
     _make_shap_values(explanations, X, X_display, explainers)
@@ -59,11 +60,9 @@ def generate_shap_explanations(comparer, X, X_display=None, explanation_types=No
     return _filter_nonfinite_shap_values(explanations, instance_names)
 
 
-def _make_shap_explainers(explanation_types, space_types, comparer, X):
-    """ Currently only supports partition explainer.
-    TODO: implement option to use different explainers
-    Because other explainers don't keep the passed output_names, possibly because of a bug in the package """
-    masker = Partition(data=X)
+def _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm, masker=None):
+    if masker is None:
+        masker = Independent(data=X)
     feature_names = comparer.feature_names
     combined_base_class_names = [f'A-{f}' for f in comparer.base_class_names] + \
                                 [f'B-{f}' for f in comparer.base_class_names]
@@ -72,46 +71,56 @@ def _make_shap_explainers(explanation_types, space_types, comparer, X):
     if 'indiv' in explanation_types:
         ns = SimpleNamespace()
         if 'labels' in space_types:
-            ns.labels = shap.Explainer(comparer.predict_one_hot_combined, masker=masker,
-                                       algorithm='partition', feature_names=feature_names,
-                                       output_names=combined_base_class_names)
+            ns.labels = _make_shap_explainer(comparer.predict_one_hot_combined, masker=masker,
+                                             algorithm=algorithm, feature_names=feature_names,
+                                             output_names=combined_base_class_names)
         if 'proba' in space_types:
-            ns.proba = shap.Explainer(comparer.predict_proba_combined, masker=masker,
-                                      algorithm='partition', feature_names=feature_names,
-                                      output_names=combined_base_class_names)
+            ns.proba = _make_shap_explainer(comparer.predict_proba_combined, masker=masker,
+                                            algorithm=algorithm, feature_names=feature_names,
+                                            output_names=combined_base_class_names)
         if 'log_odds' in space_types:
-            ns.log_odds = shap.Explainer(comparer.predict_log_odds_combined, masker=masker,
-                                         algorithm='partition', feature_names=feature_names,
-                                         output_names=combined_base_class_names)
+            ns.log_odds = _make_shap_explainer(comparer.predict_log_odds_combined, masker=masker,
+                                               algorithm=algorithm, feature_names=feature_names,
+                                               output_names=combined_base_class_names)
         explainers.indiv = ns
     if 'bin_diff' in explanation_types:
         ns = SimpleNamespace()
         if 'labels' in space_types:
-            ns.labels = shap.Explainer(comparer.predict_bin_diff, masker=masker,
-                                       algorithm='partition', feature_names=feature_names)
+            ns.labels = _make_shap_explainer(comparer.predict_bin_diff, masker=masker,
+                                             algorithm=algorithm, feature_names=feature_names)
         if 'proba' in space_types:
-            ns.proba = shap.Explainer(comparer.predict_bin_diff_proba, masker=masker,
-                                      algorithm='partition', feature_names=feature_names)
+            ns.proba = _make_shap_explainer(comparer.predict_bin_diff_proba, masker=masker,
+                                            algorithm=algorithm, feature_names=feature_names)
         if 'log_odds' in space_types:
-            ns.log_odds = shap.Explainer(comparer.predict_bin_diff_log_odds, masker=masker,
-                                         algorithm='partition', feature_names=feature_names)
+            ns.log_odds = _make_shap_explainer(comparer.predict_bin_diff_log_odds, masker=masker,
+                                               algorithm=algorithm, feature_names=feature_names)
         explainers.bin_diff = ns
     if 'mclass_diff' in explanation_types:
         ns = SimpleNamespace()
         if 'labels' in space_types:
-            ns.labels = shap.Explainer(comparer.predict_mclass_diff_one_hot, masker=masker,
-                                       algorithm='partition', feature_names=feature_names,
-                                       output_names=comparer.class_names)
+            ns.labels = _make_shap_explainer(comparer.predict_mclass_diff_one_hot, masker=masker,
+                                             algorithm=algorithm, feature_names=feature_names,
+                                             output_names=comparer.class_names)
         if 'proba' in space_types:
-            ns.proba = shap.Explainer(comparer.predict_mclass_diff_proba, masker=masker,
-                                      algorithm='partition', feature_names=feature_names,
-                                      output_names=comparer.class_names)
+            ns.proba = _make_shap_explainer(comparer.predict_mclass_diff_proba, masker=masker,
+                                            algorithm=algorithm, feature_names=feature_names,
+                                            output_names=comparer.class_names)
         if 'log_odds' in space_types:
-            ns.log_odds = shap.Explainer(comparer.predict_mclass_diff_log_odds, masker=masker,
-                                         algorithm='partition', feature_names=feature_names,
-                                         output_names=comparer.class_names)
+            ns.log_odds = _make_shap_explainer(comparer.predict_mclass_diff_log_odds, masker=masker,
+                                               algorithm=algorithm, feature_names=feature_names,
+                                               output_names=comparer.class_names)
         explainers.mclass_diff = ns
     return explainers
+
+
+def _make_shap_explainer(predict, masker, algorithm, feature_names, output_names=None):
+    explainer = shap.Explainer(predict, masker=masker, algorithm=algorithm, feature_names=feature_names,
+                               output_names=output_names)
+
+    # workaround: not all shap explainers support output_names. so we remember them for later to recover them
+    if output_names is not None and explainer.output_names is None:
+        explainer.output_names_backup = output_names
+    return explainer
 
 
 def _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, X_display=None):
@@ -142,6 +151,12 @@ def _make_shap_values(explanations, X, X_display, explainers):
             shap_values = explainer(X)
             if X_display is not None:
                 shap_values.display_data = X_display
+
+            # workaround: restore output_names for explainers that don't support them
+            if hasattr(explainer, 'output_names_backup'):
+                shap_values = shap.Explanation(shap_values.values, shap_values.base_values, shap_values.data,
+                                               shap_values.display_data, shap_values.instance_names,
+                                               shap_values.feature_names, explainer.output_names_backup)
             ns.__dict__[space_type] = shap_values
         explanations.__dict__[explanation_type] = ns
 

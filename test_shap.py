@@ -48,6 +48,8 @@ class PermutationExplainerTestCase(unittest.TestCase):
         masker = Independent(X)
         explainer = shap.Explainer(f, masker, algorithm='permutation', feature_names=feature_names,
                                    output_names=class_names)
+        if explainer.output_names is None:
+            explainer.output_names_backup = class_names
         return explainer
 
     def test_explainer_creation_multioutput_model_forgets_class_names(self):
@@ -59,6 +61,7 @@ class PermutationExplainerTestCase(unittest.TestCase):
         explainer = self.make_explainer(X, class_names, f, feature_names)
         self.assertEqual(explainer.feature_names, feature_names)
         self.assertNotEqual(explainer.output_names, class_names)
+        self.assertEqual(explainer.output_names_backup, class_names)
 
     def test_shap_value_generation_single_output_model_should_succeed(self):
         X, feature_names, shap_values = self.make_single_output_shap_values()
@@ -83,9 +86,10 @@ class PermutationExplainerTestCase(unittest.TestCase):
         X, class_names, f, feature_names = make_multiclass_classification()
         explainer = self.make_explainer(X, class_names, f, feature_names)
         shap_values = explainer(X)
-        shap_values = shap.Explanation(shap_values.values, shap_values.base_values, shap_values.data,
-                                       shap_values.display_data, shap_values.instance_names, shap_values.feature_names,
-                                       class_names)
+        if hasattr(explainer, 'output_names_backup'):
+            shap_values = shap.Explanation(shap_values.values, shap_values.base_values, shap_values.data,
+                                           shap_values.display_data, shap_values.instance_names,
+                                           shap_values.feature_names, explainer.output_names_backup)
         return X, class_names, feature_names, shap_values
 
     def test_slice_instances_single_output_model_shap_values_should_succeed(self):

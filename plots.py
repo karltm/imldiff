@@ -82,10 +82,10 @@ def plot_2d_singleclass(shap_values, title=None, x=0, y=1, feature_order=None, *
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
     ncols = 1
-    nrows = shap_values.shape[1]
+    nrows = len(feature_order)
     fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True)
     plot_idx = 0
-    fig.suptitle('SHAP values of ' + title, fontsize=16)
+    fig.suptitle(title, fontsize=16)
     display_shap_values = shap_values[:, [x, y]]
     X_display = get_display_data(display_shap_values)
     for feature_idx in feature_order:
@@ -97,7 +97,7 @@ def plot_2d_singleclass(shap_values, title=None, x=0, y=1, feature_order=None, *
                         vmin=-vmax, vmax=vmax,
                         cmap=colors.red_blue,
                         **kwargs)
-        ax.set_title(display_shap_values.feature_names[feature_idx])
+        ax.set_title(shap_values.feature_names[feature_idx])
         ax.set_xlabel(display_shap_values.feature_names[0])
         ax.set_ylabel(display_shap_values.feature_names[1])
         plot_idx += 1
@@ -117,8 +117,8 @@ def plot_2d_multiclass(shap_values, title=None, x=0, y=1, feature_order=None, cl
         feature_order = range(shap_values.shape[1])
     if class_order is None:
         class_order = range(shap_values.shape[2])
-    ncols = shap_values.shape[2]
-    nrows = shap_values.shape[1]
+    ncols = len(class_order)
+    nrows = len(feature_order)
     fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True)
     plot_idx = 0
     fig.suptitle(title, fontsize=16)
@@ -134,8 +134,8 @@ def plot_2d_multiclass(shap_values, title=None, x=0, y=1, feature_order=None, cl
                             vmin=-vmax, vmax=vmax,
                             cmap=colors.red_blue,
                             **kwargs)
-            ax.set_title(f'SHAP-values of {display_shap_values.feature_names[feature_idx]} '
-                         f'for {display_shap_values.output_names[class_idx]}')
+            ax.set_title(f'SHAP-values of {shap_values.feature_names[feature_idx]} '
+                         f'for {shap_values.output_names[class_idx]}')
             ax.set_xlabel(display_shap_values.feature_names[0])
             ax.set_ylabel(display_shap_values.feature_names[1])
             plot_idx += 1
@@ -268,8 +268,6 @@ def plot_forces(shap_values, title=None, instance_order=None, class_order=None, 
     Further keyword arguments are passed to shap plot function
     e.g. link='logit'
     """
-    if shap_values.shape[0] > 1000:
-        warnings.warn('plotting more than 1000 instances could slow down your browser. try sclicing or sampling')
     if len(shap_values.shape) <= 2:
         return plot_forces_singleclass(shap_values, title, instance_order, **kwargs)
     if len(shap_values.shape) == 3:

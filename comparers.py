@@ -1,11 +1,7 @@
-from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay, roc_curve, roc_auc_score
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from shap.plots import colors
 import numpy as np
-from util import encode_one_hot, reduce_multiclass_proba_diff_shap_values, \
-                 calc_binary_log_odds_from_log_proba, calc_log_odds_from_log_proba
-import warnings
-import functools
+from util import encode_one_hot, calc_binary_log_odds_from_log_proba, calc_log_odds_from_log_proba
 from difference_models import BinaryDifferenceClassifier, MulticlassDifferenceClassifier
 from plots import plot_decision_boundary
 
@@ -25,6 +21,10 @@ class ModelComparer:
     @property
     def classifiers(self):
         return self.clf_a, self.clf_b
+
+    @property
+    def classifier_names(self):
+        return ['A', 'B']
     
     @property
     def base_classes(self):
@@ -68,33 +68,24 @@ class ModelComparer:
     
     @property
     def predict_functions(self):
-        return [clf.predict for clf in self.classifiers]
+        return dict([(clf_name, clf.predict)
+                     for clf_name, clf in zip(self.classifier_names, self.classifiers)])
     
     @property
     def predict_one_hot_functions(self):
-        return [lambda X, f=f: encode_one_hot(f(X), self.base_classes) for f in self.predict_functions]
-    
-    @property
-    def predict_one_hot_combined(self):
-        return lambda X: np.hstack([f(X) for f in self.predict_one_hot_functions])
-    
+        return dict([(clf_name, lambda X, f=f: encode_one_hot(f(X), self.base_classes))
+                     for clf_name, f in self.predict_functions.items()])
+
     @property
     def predict_proba_functions(self):
-        return [clf.predict_proba for clf in self.classifiers]
-    
-    @property
-    def predict_proba_combined(self):
-        return lambda X: np.hstack([f(X) for f in self.predict_proba_functions])
-    
+        return dict([(clf_name, clf.predict_proba)
+                      for clf_name, clf in zip(self.classifier_names, self.classifiers)])
+
     @property
     def predict_log_odds_functions(self):
-        return [lambda X, clf=clf: calc_log_odds_from_log_proba(clf.predict_log_proba(X))
-                for clf in self.classifiers]
-    
-    @property
-    def predict_log_odds_combined(self):
-        return lambda X: np.hstack([f(X) for f in self.predict_log_odds_functions])
-    
+        return dict([(clf_name, lambda X, clf=clf: calc_log_odds_from_log_proba(clf.predict_log_proba(X)))
+                     for clf_name, clf in zip(self.classifier_names, self.classifiers)])
+
     @property
     def predict_bin_diff(self):
         return self.bin_diff_clf.predict
@@ -128,25 +119,25 @@ class ModelComparer:
         zlim = None
         class_names = None
         if kind == 'label':
-            predict_functions = self.predict_functions
             class_names = self.mclass_diff_clf.base_classes_
             if not separate:
                 fig, axs = plt.subplots(ncols=2, sharey=True, figsize=(2*7, 7), constrained_layout=True)
-                for predict, title, ax in zip(predict_functions, ['$c_A(X)$', '$c_B(X)$'], axs):
-                    plot_decision_boundary(X, y_true, title, self.feature_names, X_display,
+                for (clf_name, predict), ax in zip(self.predict_functions.items(), axs):
+                    plot_decision_boundary(X, y_true, clf_name, self.feature_names, X_display,
                                            predict=predict, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
             else:
-                fig, axs = plt.subplots(nrows=len(self.mclass_diff_clf.base_classes_), ncols=2, sharex=True, sharey=True,
-                                        figsize=(2*7, len(self.mclass_diff_clf.base_classes_)*7), constrained_layout=True, squeeze=False)
+                fig, axs = plt.subplots(nrows=len(self.base_classes), ncols=2, sharex=True, sharey=True,
+                                        figsize=(2*7, len(self.base_classes)*7),
+                                        constrained_layout=True, squeeze=False)
                 
-                for predict, title, axs_row in zip(predict_functions, ['$c_A(X)$', '$c_B(X)$'], axs.T):
+                for (clf_name, predict), axs_row in zip(self.predict_functions.items(), axs.T):
                     y_pred = predict(X)
-                    masks = [y_pred == label for label in self.mclass_diff_clf.base_classes_]
+                    masks = [y_pred == label for label in self.base_classes]
                     for mask, ax in zip(masks, axs_row):
-                        plot_decision_boundary(X[mask, :], y_true[mask] if y_true is not None else None,
-                                               title, self.feature_names, X_display[mask, :] if X_display is not None else None,
+                        plot_decision_boundary(X[mask, :], y_true[mask] if y_true is not None else None, clf_name,
+                                               self.feature_names, X_display[mask, :] if X_display is not None else None,
                                                predict=predict, class_names=class_names, zlim=zlim,
                                                idx_x=idx_x, idx_y=idx_y,
                                                fig=fig, ax=ax, **kwargs)
@@ -161,18 +152,18 @@ class ModelComparer:
                 y_true[y_true == self.mclass_diff_clf.base_classes_[1]] = zlim[1]
             else:
                 raise Exception(f'unsupported kind: {kind}')
-                
+
             if self.is_binary_classification_task and not separate:
                 plot_classes = [1]
             else:
-                plot_classes = self.mclass_diff_clf.base_classes_
+                plot_classes = self.base_classes
 
             fig, axs = plt.subplots(nrows=len(plot_classes), ncols=2, sharex=True, sharey=True,
                                     figsize=(2*7, len(plot_classes)*7), constrained_layout=True, squeeze=False)
-            for predict, title, axs_row in zip(predict_functions, ['$c_A(X)$', '$c_B(X)$'], axs.T):
+            for (clf_name, predict), axs_row in zip(predict_functions.items(), axs.T):
                 for class_idx, ax in zip(plot_classes, axs_row.flatten()):
                     predict_class = lambda X: predict(X)[:, class_idx]
-                    plot_decision_boundary(X, y_true, title, self.feature_names, X_display,
+                    plot_decision_boundary(X, y_true, clf_name, self.feature_names, X_display,
                                            predict=predict_class, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
@@ -230,8 +221,7 @@ class ModelComparer:
             fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
             fig.suptitle('Binary difference classifier and its decision boundary', fontsize='x-large')
             plot_decision_boundary(X, binary_diff_predictions, 'Labels different', self.feature_names,
-                                   predict=predict_binary,
-                                   zlim=zlim, fig=fig, ax=ax, **kwargs)
+                                   predict=predict_binary, zlim=zlim, fig=fig, ax=ax, **kwargs)
             
             nclasses = len(self.mclass_diff_clf.base_classes_)
             fig, axs = plt.subplots(nrows=nclasses, ncols=nclasses, sharex=True, sharey=True,
@@ -241,8 +231,7 @@ class ModelComparer:
                 class_name = str(self.mclass_diff_clf.class_tuples_[class_idx])
                 predict = lambda X: predict_multiclass(X)[:, class_idx]
                 plot_decision_boundary(X, diff_predictions[:, class_idx], class_name, self.feature_names,
-                                       predict=predict,
-                                       zlim=zlim, fig=fig, ax=ax, **kwargs)
+                                       predict=predict, zlim=zlim, fig=fig, ax=ax, **kwargs)
                 
     def plot_confusion_matrix(self, X):
         pred_a = self.clf_a.predict(X)

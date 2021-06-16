@@ -2,6 +2,7 @@ import numpy as np
 from scipy.special import logsumexp
 import shap
 from shap.utils import hclust_ordering
+from sklearn.decomposition import PCA
     
 def reduce_multiclass_proba_diff_shap_values(shap_values):
     """

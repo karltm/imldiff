@@ -4,6 +4,8 @@ from shap.plots import colors
 import numpy as np
 import shap
 from IPython.display import display
+from explainers import ensure_shap_values_are_3d, ensure_all_shap_values_are_3d, ensure_are_shap_values
+
 
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
@@ -70,88 +72,52 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
     ax.set_title(title)
 
 
-def plot_2d(shap_values, title=None, x=0, y=1, feature_order=None, class_order=None, **kwargs):
-    if len(shap_values.shape) == 2:
-        return plot_2d_singleclass(shap_values, title, x, y, feature_order, **kwargs)
-    if len(shap_values.shape) == 3:
-        return plot_2d_multiclass(shap_values, title, x, y, feature_order, class_order, **kwargs)
-    raise Exception(f'invalid dimensions: {len(shap_values.shape)}')
-
-
-def plot_2d_singleclass(shap_values, title=None, x=0, y=1, feature_order=None, **kwargs):
-    if feature_order is None:
-        feature_order = range(shap_values.shape[1])
-    ncols = 1
-    nrows = len(feature_order)
-    fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True)
+def plot_2d(*shap_values, title=None, x=0, y=1, **kwargs):
+    shap_values = ensure_all_shap_values_are_3d(*shap_values)
+    ncols = sum([s.shape[2] for s in shap_values])
+    nrows = shap_values[0].shape[1]
+    fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True, sharex=True, sharey=True)
     plot_idx = 0
     fig.suptitle(title, fontsize=16)
-    display_shap_values = shap_values[:, [x, y]]
-    X_display = get_display_data(display_shap_values)
-    for feature_idx in feature_order:
-        vmax = np.max(np.abs(shap_values.values[:, feature_idx]))
-        ax = axs.flat[plot_idx]
-        cs = ax.scatter(X_display[:, 0],
-                        X_display[:, 1],
-                        c=shap_values.values[:, feature_idx],
-                        vmin=-vmax, vmax=vmax,
-                        cmap=colors.red_blue,
-                        **kwargs)
-        ax.set_title(shap_values.feature_names[feature_idx])
-        ax.set_xlabel(display_shap_values.feature_names[0])
-        ax.set_ylabel(display_shap_values.feature_names[1])
-        plot_idx += 1
+    for feature_idx in range(nrows):
+        vmax = np.max([np.abs(s[:, feature_idx, :].values).flatten().max(0) for s in shap_values])
+        for s in shap_values:
+            display_shap_values = s[:, [x, y], :]
+            X_display = _get_display_data(display_shap_values)
+            for class_idx in range(s.shape[2]):
+                ax = axs.flat[plot_idx]
+                cs = ax.scatter(X_display[:, 0],
+                                X_display[:, 1],
+                                c=s.values[:, feature_idx, class_idx],
+                                vmin=-vmax, vmax=vmax,
+                                cmap=colors.red_blue,
+                                **kwargs)
+                ax.set_title(f'SHAP-values of {s.feature_names[feature_idx]} '
+                             f'for {s.output_names[class_idx]}')
+                ax.set_xlabel(display_shap_values.feature_names[0])
+                ax.set_ylabel(display_shap_values.feature_names[1])
+                plot_idx += 1
         fig.colorbar(cs, ax=ax, shrink=0.9)
     plt.show()
 
 
-def get_display_data(shap_values):
+def _get_display_data(shap_values):
     if shap_values.display_data is not None:
         return shap_values.display_data
     else:
         return shap_values.data
 
 
-def plot_2d_multiclass(shap_values, title=None, x=0, y=1, feature_order=None, class_order=None, **kwargs):
-    if feature_order is None:
-        feature_order = range(shap_values.shape[1])
-    if class_order is None:
-        class_order = range(shap_values.shape[2])
-    ncols = len(class_order)
-    nrows = len(feature_order)
-    fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True)
-    plot_idx = 0
-    fig.suptitle(title, fontsize=16)
-    display_shap_values = shap_values[:, [x, y], :]
-    X_display = get_display_data(display_shap_values)
-    for feature_idx in feature_order:
-        vmax = np.max(np.abs(shap_values.values[:, feature_idx, :]))
-        for class_idx in class_order:
-            ax = axs.flat[plot_idx]
-            cs = ax.scatter(X_display[:, 0],
-                            X_display[:, 1],
-                            c=shap_values.values[:, feature_idx, class_idx],
-                            vmin=-vmax, vmax=vmax,
-                            cmap=colors.red_blue,
-                            **kwargs)
-            ax.set_title(f'SHAP-values of {shap_values.feature_names[feature_idx]} '
-                         f'for {shap_values.output_names[class_idx]}')
-            ax.set_xlabel(display_shap_values.feature_names[0])
-            ax.set_ylabel(display_shap_values.feature_names[1])
-            plot_idx += 1
-        fig.colorbar(cs, ax=ax, shrink=0.9)
-    plt.show()
-
-
-def plot_feature_importance_bar(shap_values, title=None, feature_order=None, class_order=None):
+def plot_feature_importance_bar(shap_values, title=None, feature_order=None):
+    shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) <= 2:
-        return plot_feature_importance_bar_singleclass(shap_values, title, feature_order)
+        return _plot_feature_importance_bar_singleclass(shap_values, title, feature_order)
     elif len(shap_values.shape) == 3:
-        return plot_feature_importance_bar_multiclass(shap_values, title, class_order)
+        return _plot_feature_importance_bar_multiclass(shap_values, title)
     raise Exception(f'invalid dimensions: {shap_values.shape}')
 
-        
-def plot_feature_importance_bar_singleclass(shap_values, title=None, feature_order=None):
+
+def _plot_feature_importance_bar_singleclass(shap_values, title=None, feature_order=None):
     if feature_order is None:
         if len(shap_values.shape) == 2:
             feature_order = range(shap_values.shape[1])
@@ -160,10 +126,8 @@ def plot_feature_importance_bar_singleclass(shap_values, title=None, feature_ord
     plt.title(title)
     shap.plots.bar(shap_values, order=feature_order, max_display=len(feature_order))
 
-    
-def plot_feature_importance_bar_multiclass(shap_values, title=None, class_order=None):
-    if class_order is None:
-        class_order = range(shap_values.shape[2])
+
+def _plot_feature_importance_bar_multiclass(shap_values, title=None):
     shap_values_list = [values.T for values in shap_values.values.T]
     shap.summary_plot(shap_values_list, shap_values.data,
                       feature_names=shap_values.feature_names,
@@ -174,21 +138,22 @@ def plot_feature_importance_bar_multiclass(shap_values, title=None, class_order=
 
 
 def plot_feature_importance_scatter(shap_values, title=None, feature_order=None, class_order=None):
+    shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) == 2:
-        return plot_feature_importance_scatter_singleclass(shap_values, title, feature_order)
+        return _plot_feature_importance_scatter_singleclass(shap_values, title, feature_order)
     elif len(shap_values.shape) == 3:
-        return plot_feature_importance_scatter_multiclass(shap_values, title, feature_order, class_order)
+        return _plot_feature_importance_scatter_multiclass(shap_values, title, feature_order, class_order)
     raise Exception(f'invalid dimensions: {shap_values.shape}')
 
     
-def plot_feature_importance_scatter_singleclass(shap_values, title=None, feature_order=None):
+def _plot_feature_importance_scatter_singleclass(shap_values, title=None, feature_order=None):
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
     plt.title(title)
     shap.plots.beeswarm(shap_values, order=feature_order, plot_size=(14, 7))
 
 
-def plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None):
+def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None):
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
     if class_order is None:
@@ -211,54 +176,29 @@ def plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_
         plt.show()
 
 
-def plot_feature_effects(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
+def plot_feature_effects(*shap_values, title=None, **kwargs):
     """ Plot marginal effect of each feature vs. its SHAP values per class.
 
     Further keyword arguments are passed to shap.plots.scatter,
     and may include e.g. color=is_pred_diff, alpha=0.2
     """
-    if len(shap_values.shape) == 2:
-        return plot_feature_effects_singleclass(shap_values, title, feature_order, **kwargs)
-    elif len(shap_values.shape) == 3:
-        return plot_feature_effects_multiclass(shap_values, title, feature_order, class_order, **kwargs)
-    raise Exception(f'invalid dimensions: {shap_values.shape}')
-
-
-def plot_feature_effects_singleclass(shap_values, title=None, feature_order=None, **kwargs):
-    if feature_order is None:
-        feature_order = range(shap_values.shape[1])
-    ncols = 1
-    nrows = shap_values.shape[1]
-    fig = plt.figure(figsize=(9*ncols, 7*nrows))
-    fig.suptitle(title, fontsize='x-large')
-    i = 1
-    for feature_idx in feature_order:
-        ax = fig.add_subplot(nrows, ncols, i)
-        shap.plots.scatter(shap_values[:, feature_idx], title=shap_values.feature_names[feature_idx],
-                           ax=ax, show=False, **kwargs)
-        i += ncols
-    plt.show()
-    
-    
-def plot_feature_effects_multiclass(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
-    if feature_order is None:
-        feature_order = range(shap_values.shape[1])
-    if class_order is None:
-        class_order = range(shap_values.shape[2])
-    ncols = len(class_order)
-    nrows = shap_values.shape[1] * 2
-    fig = plt.figure(figsize=(9 * ncols, 7 * nrows))
+    shap_values = ensure_all_shap_values_are_3d(*shap_values)
+    ncols = sum([s.shape[2] for s in shap_values])
+    nrows = shap_values[0].shape[1]
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='row', sharey='row', figsize=(9 * ncols, 7 * nrows))
     fig.suptitle(title, fontsize='x-large', y=0.91)
-    plot_idx = 1
-    for feature_idx in feature_order:
-        ax_ref = None
-        for class_idx in class_order:
-            ax = fig.add_subplot(nrows, ncols, plot_idx, sharey=ax_ref)
-            if not ax_ref:
-                ax_ref = ax
-            shap.plots.scatter(shap_values[:, feature_idx, class_idx], title=shap_values.output_names[class_idx],
-                               ax=ax, show=False, **kwargs)
-            plot_idx += 1
+    plot_idx = 0
+    for feature_idx in range(nrows):
+        xmin = np.min([s.data[:, feature_idx].min(0) for s in shap_values])
+        xmax = np.max([s.data[:, feature_idx].max(0) for s in shap_values])
+        ymin = np.min([s.values[:, feature_idx, :].flatten().min(0) for s in shap_values])
+        ymax = np.max([s.values[:, feature_idx, :].flatten().max(0) for s in shap_values])
+        for s in shap_values:
+            for class_idx in range(s.shape[2]):
+                shap.plots.scatter(s[:, feature_idx, class_idx], title=s.output_names[class_idx],
+                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
+                                   ax=axs.flat[plot_idx], show=False, **kwargs)
+                plot_idx += 1
     plt.show()
 
 
@@ -268,6 +208,7 @@ def plot_forces(shap_values, title=None, instance_order=None, class_order=None, 
     Further keyword arguments are passed to shap plot function
     e.g. link='logit'
     """
+    shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) <= 2:
         return plot_forces_singleclass(shap_values, title, instance_order, **kwargs)
     if len(shap_values.shape) == 3:
@@ -278,7 +219,7 @@ def plot_forces(shap_values, title=None, instance_order=None, class_order=None, 
 def plot_forces_singleclass(shap_values, title=None, instance_order=None, **kwargs):
     if instance_order is not None and isinstance(instance_order, np.ndarray):
         instance_order = instance_order.tolist()
-    X_display = get_display_data(shap_values)
+    X_display = _get_display_data(shap_values)
     plot = shap.plots.force(
         base_value=shap_values.base_values[0],
         shap_values=shap_values.values,
@@ -295,7 +236,7 @@ def plot_forces_multiclass(shap_values, instance_order=None, class_order=None, *
         class_order = range(shap_values.shape[2])
     if instance_order is not None and isinstance(instance_order, np.ndarray):
         instance_order = instance_order.tolist()
-    X_display = get_display_data(shap_values)
+    X_display = _get_display_data(shap_values)
     for class_idx in class_order:
         shap_values_ = shap_values[:, :, class_idx]
         plot = shap.plots.force(

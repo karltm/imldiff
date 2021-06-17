@@ -28,34 +28,47 @@ class BaseExplanationsNamespace(SimpleNamespace):
 
 
 def merge_explanations(**explanations):
-    names_list = []
-    values_list = []
-    base_values_list = []
+    names = []
+    values = []
+    base_values = []
     for k, v in explanations.items():
         if isinstance(v, BaseExplanationsNamespace):
             v = v.merged
-        if len(v.shape) == 3:
-            names = [f'{k}.{name}' for name in v.output_names]
-            values = v.values
-            base_values = v.base_values
-        elif len(v.shape) == 2:
-            if isinstance(v.output_names, str):
-                names = [f'{k}.{v.output_names}']
-            else:
-                names = [k]
-            values = v.values.reshape((v.shape[0], v.shape[1], 1))
-            base_values = v.base_values.reshape((v.shape[0], 1))
-        else:
-            raise Exception(f'invalid dimensions of {k}: {v.shape}')
-        names_list += names
-        values_list.append(values)
-        base_values_list.append(base_values)
-    names = names_list
-    values = np.concatenate(values_list, axis=2)
-    base_values = np.concatenate(base_values_list, axis=1)
+        v = ensure_shap_values_are_3d(v)
+        names += [f'{k}.{name}' for name in v.output_names]
+        values.append(v.values)
+        base_values.append(v.base_values)
+    values = np.concatenate(values, axis=2)
+    base_values = np.concatenate(base_values, axis=1)
     first = next(iter(explanations.values()))
     return shap.Explanation(values, base_values, first.data, first.display_data,
                             feature_names=first.feature_names, output_names=names)
+
+
+def ensure_are_shap_values(shap_values):
+    if isinstance(shap_values, BaseExplanationsNamespace):
+        return shap_values.merged
+    return shap_values
+
+
+def ensure_shap_values_are_3d(shap_values):
+    shap_values = ensure_are_shap_values(shap_values)
+    if len(shap_values.shape) == 3:
+        return shap_values
+    if len(shap_values.shape) == 2:
+        if shap_values.output_names is not None:
+            names = [shap_values.output_names]
+        else:
+            names = None
+        values = shap_values.values.reshape((shap_values.shape[0], shap_values.shape[1], 1))
+        base_values = shap_values.base_values.reshape((shap_values.shape[0], 1))
+        return shap.Explanation(values, base_values, shap_values.data, shap_values.display_data,
+                                feature_names=shap_values.feature_names, output_names=names)
+    raise Exception(f'invalid dimensions: {len(shap_values.shape)}')
+
+
+def ensure_all_shap_values_are_3d(*shap_values):
+    return tuple([ensure_shap_values_are_3d(s) for s in shap_values])
 
 
 class SameTypeExplanationsNamespace(BaseExplanationsNamespace):
@@ -123,13 +136,13 @@ def _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm
     if 'bin_diff' in explanation_types:
         ns = SimpleNamespace()
         if 'labels' in space_types:
-            ns.labels = _make_shap_explainer(comparer.predict_bin_diff, masker=masker,
+            ns.labels = _make_shap_explainer(comparer.predict_bin_diff, masker=masker, output_names='diff',
                                              algorithm=algorithm, feature_names=feature_names)
         if 'proba' in space_types:
-            ns.proba = _make_shap_explainer(comparer.predict_bin_diff_proba, masker=masker,
+            ns.proba = _make_shap_explainer(comparer.predict_bin_diff_proba, masker=masker, output_names='diff',
                                             algorithm=algorithm, feature_names=feature_names)
         if 'log_odds' in space_types:
-            ns.log_odds = _make_shap_explainer(comparer.predict_bin_diff_log_odds, masker=masker,
+            ns.log_odds = _make_shap_explainer(comparer.predict_bin_diff_log_odds, masker=masker, output_names='diff',
                                                algorithm=algorithm, feature_names=feature_names)
         explainers.bin_diff = ns
     if 'mclass_diff' in explanation_types:

@@ -7,7 +7,10 @@ from sklearn.metrics import brier_score_loss, precision_score, recall_score, f1_
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LogisticRegression
 from matplotlib import pyplot as plt
-    
+
+from explainers import ensure_shap_values_are_3d
+
+
 def reduce_multiclass_proba_diff_shap_values(shap_values):
     """
     Reduce multiclass difference SHAP-values to binary class difference SHAP-values
@@ -115,12 +118,8 @@ def calibrate_classifier(est, name, X_train, X_test, y_train, y_test, cv=10, fig
 
 
 def calc_feature_order(shap_values):
-    if len(shap_values.shape) == 2:
-        values = np.abs(shap_values.values).mean(axis=0)
-    elif len(shap_values.shape) == 3:
-        values = np.abs(shap_values.values).mean(axis=2).mean(axis=0)
-    else:
-        raise Exception(f'invalid dimensions: {shap_values.shape}')
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    values = np.abs(shap_values.values).mean(axis=2).mean(axis=0)
     feature_order = np.flip(values.argsort())
     feature_importance = shap.Explanation(values, feature_names=shap_values.feature_names)
     return feature_order, feature_importance
@@ -140,9 +139,10 @@ def calc_class_order(shap_values, information_threshold_pct=0.9):
 
 
 def calc_instance_order(shap_values):
-    values = shap_values.values
-    if len(values.shape) == 3:
-        values = values.reshape((values.shape[0], values.shape[1] * values.shape[2]))
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    values = shap_values.values.reshape(
+        (shap_values.values.shape[0],
+         shap_values.values.shape[1] * shap_values.values.shape[2]))
     instance_order = np.argsort(hclust_ordering(values))
     return instance_order
     # informative_class_indices = class_order[:n_informative_classes]

@@ -1,6 +1,6 @@
 # Explaining Differences between Classifiers Using Interpretable Machine Learning
 
-Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using [SHAP values](https://shap.readthedocs.io/en/latest/), as proposed by S. M. Lundberg and S.-I. Lee. A unified approach to interpreting model predictions. In _Advances in Neural Information Processing Systems_, pages 4765–4774, 2017.
+Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using [SHAP values](https://shap.readthedocs.io/en/latest/).
 
 Please see the demo notebooks for how to use the difference models. To visualize them directly in your browser, go to https://nbviewer.jupyter.org/github/MasterKarl/imldiff/tree/main/notebooks/.
 
@@ -76,5 +76,7 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 
 
 ## References
+
+This approach is based on SHAP values, proposed in S. M. Lundberg and S.-I. Lee. A unified approach to interpreting model predictions. In _Advances in Neural Information Processing Systems_, pages 4765–4774, 2017
 
 The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c), released under the GNU General Public License v3.0. For this reason, a copy has been obtained from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c).

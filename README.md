@@ -1,6 +1,6 @@
 # Explaining Differences between Classifiers Using Interpretable Machine Learning
 
-Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using SHAP values. Mainly I'm using the python package [shap](https://github.com/slundberg/shap) and scikit-learn.
+Here I host code and notebooks I'm using in my master's thesis to explain differences between machine learning classifiers using [SHAP values](https://shap.readthedocs.io/en/latest/), as proposed by S. M. Lundberg and S.-I. Lee. A unified approach to interpreting model predictions. In _Advances in Neural Information Processing Systems_, pages 4765–4774, 2017.
 
 Please see the demo notebooks for how to use the difference models. To visualize them directly in your browser, go to https://nbviewer.jupyter.org/github/MasterKarl/imldiff/tree/main/notebooks/.
 
@@ -73,3 +73,13 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 - Explain the importance of the features for the observed differences, by aggregating them or plotting the distribution in a scatter plot
 - Explain the marginal effect of a feature for the observed differences using SHAP dependence plots, similar to the partial dependence plots proposed by Friedman (Friedman, Jerome H. "Greedy function approximation: a gradient boosting machine." _Annals of statistics_ (2001): 1189-1232.)
 - Cluster instances with similar SHAP values
+
+
+## References
+
+The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c) by Andreas Staufer, released under the GNU General Public License v3.0. For this reason, the following scripts have been copied from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c) and left unmodified:
+
+- diro2c.py
+- rule_extractor.py
+- data_generation/*
+- enums/*

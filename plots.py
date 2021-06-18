@@ -11,7 +11,7 @@ plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
-                           idx_x=0, idx_y=1, class_names=None, zlim=None,
+                           idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
                            fig=None, ax=None, **kwargs):
     """
     - X: instances to plot
@@ -42,7 +42,6 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         
     draw_contours = predict is not None and X.shape[1] == 2
     if draw_contours:
-        mesh_step_size = .01    
         x_min, x_max = X[:, idx_x].min() - .5, X[:, idx_x].max() + .5
         y_min, y_max = X[:, idx_y].min() - .5, X[:, idx_y].max() + .5
         xx, yy = np.meshgrid(np.arange(x_min, x_max, mesh_step_size), np.arange(y_min, y_max, mesh_step_size))

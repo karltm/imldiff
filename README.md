@@ -77,9 +77,4 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 
 ## References
 
-The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c) by Andreas Staufer, released under the GNU General Public License v3.0. For this reason, the following scripts have been copied from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c) and left unmodified:
-
-- diro2c.py
-- rule_extractor.py
-- data_generation/*
-- enums/*
+The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c) by Andreas Staufer, released under the GNU General Public License v3.0. For this reason, a copy has been obtained from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c).

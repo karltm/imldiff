@@ -77,4 +77,4 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 
 ## References
 
-The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c) by Andreas Staufer, released under the GNU General Public License v3.0. For this reason, a copy has been obtained from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c).
+The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c), released under the GNU General Public License v3.0. For this reason, a copy has been obtained from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c).

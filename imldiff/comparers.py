@@ -1,11 +1,15 @@
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import numpy as np
-from util import encode_one_hot, calc_binary_log_odds_from_log_proba, calc_log_odds_from_log_proba
 from difference_models import BinaryDifferenceClassifier, MulticlassDifferenceClassifier
-from plots import plot_decision_boundary
+from shap.plots import colors
+from scipy.special import logsumexp
+import matplotlib.cm as cm
+
+
 
 class ModelComparer:
+    """ Helper class for comparing two models, that provide API access similar to scikit-learn's models """
     
     def __init__(self, clf_a, clf_b, feature_names):
         self.feature_names = np.array(feature_names)
@@ -73,7 +77,7 @@ class ModelComparer:
     
     @property
     def predict_one_hot_functions(self):
-        return dict([(clf_name, lambda X, f=f: encode_one_hot(f(X), self.base_classes))
+        return dict([(clf_name, lambda X, f=f: _encode_one_hot(f(X), self.base_classes))
                      for clf_name, f in self.predict_functions.items()])
 
     @property
@@ -83,7 +87,7 @@ class ModelComparer:
 
     @property
     def predict_log_odds_functions(self):
-        return dict([(clf_name, lambda X, clf=clf: calc_log_odds_from_log_proba(clf.predict_log_proba(X)))
+        return dict([(clf_name, lambda X, clf=clf: _calc_log_odds_from_log_proba(clf.predict_log_proba(X)))
                      for clf_name, clf in zip(self.classifier_names, self.classifiers)])
 
     @property
@@ -96,7 +100,7 @@ class ModelComparer:
     
     @property
     def predict_bin_diff_log_odds(self):
-        return lambda X: calc_binary_log_odds_from_log_proba(self.bin_diff_clf.predict_log_proba(X))
+        return lambda X: _calc_binary_log_odds_from_log_proba(self.bin_diff_clf.predict_log_proba(X))
     
     @property
     def predict_mclass_diff(self):
@@ -104,7 +108,7 @@ class ModelComparer:
     
     @property
     def predict_mclass_diff_one_hot(self):
-        return lambda X: encode_one_hot(self.predict_mclass_diff(X), self.classes)
+        return lambda X: _encode_one_hot(self.predict_mclass_diff(X), self.classes)
     
     @property
     def predict_mclass_diff_proba(self):
@@ -112,7 +116,7 @@ class ModelComparer:
     
     @property
     def predict_mclass_diff_log_odds(self):
-        return lambda X: calc_log_odds_from_log_proba(self.mclass_diff_clf.predict_log_proba(X))
+        return lambda X: _calc_log_odds_from_log_proba(self.mclass_diff_clf.predict_log_proba(X))
 
     def plot_individual_clf_decision_boundaries(self, X, X_display=None, y_true=None, separate=False,
                                                 kind='label', idx_x=0, idx_y=1, **kwargs):
@@ -244,3 +248,87 @@ class ModelComparer:
         ax.set_ylabel('$\hat{y}_A$')
         ax.set_xlabel('$\hat{y}_B$')
         plt.show()
+
+
+def _encode_one_hot(labels, classes):
+    indices = np.searchsorted(classes, labels)
+    return np.eye(len(classes))[indices]
+
+
+def _calc_binary_log_odds_from_log_proba(log_proba):
+    return log_proba[:, 1] - log_proba[:, 0]
+
+
+def _calc_log_odds_from_log_proba(log_proba):
+    log_odds = np.empty(log_proba.shape)
+    for i in range(log_proba.shape[1]):
+        class_mask = [True] * log_proba.shape[1]
+        class_mask[i] = False
+        log_odds[:, i] = log_proba[:, i] - logsumexp(log_proba[:, class_mask], axis=1)
+    return log_odds
+
+
+plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+
+
+def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
+                           idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
+                           fig=None, ax=None, **kwargs):
+    """
+    - X: instances to plot
+    - z: color of instances
+    - title: for figure
+    - feature_names
+    - predict: draw contours for this function (only if number of features is 2)
+    - idx_x: index of feature to plot on x axis
+    - idx_y: index of feature to plot on y axis
+    - class_names: set this to a list of class names if predict returns labels
+    - zlim: set this to the range of values if predict returns a continuous variable, e.g. (0, 1)
+    - fig, ax
+    """
+
+
+    if fig is None or ax is None:
+        fig, ax = plt.subplots()
+
+    if class_names is None and zlim is None:
+        if z.dtype == int or z.dtype == bool:
+            class_names = np.unique(z)
+        else:
+            zlim = np.min(z), np.max(z)
+
+    if X_display is None:
+        X_display = X
+
+    if z is None:
+        z = predict(X)
+
+    draw_contours = predict is not None and X.shape[1] == 2
+    if draw_contours:
+        x_min, x_max = X[:, idx_x].min() - .5, X[:, idx_x].max() + .5
+        y_min, y_max = X[:, idx_y].min() - .5, X[:, idx_y].max() + .5
+        xx, yy = np.meshgrid(np.arange(x_min, x_max, mesh_step_size), np.arange(y_min, y_max, mesh_step_size))
+        z_pred = predict(np.c_[xx.ravel(), yy.ravel()])
+        z_pred = z_pred.reshape(xx.shape)
+
+    if class_names is not None:
+        if draw_contours:
+            levels = np.arange(len(class_names) + 1)
+            cs = ax.contourf(xx, yy, z_pred + 0.5, levels, colors=plt_colors, alpha=.8)
+        for class_idx, class_ in enumerate(class_names):
+            X_ = X_display[z == class_idx, :]
+            if X_.shape[0] == 0:
+                continue
+            ax.scatter(X_[:, idx_x], X_[:, idx_y], color=plt_colors[class_idx], edgecolors='k', label=str(class_), **kwargs)
+        ax.legend()
+    else:
+        if draw_contours:
+            levels = np.linspace(zlim[0], zlim[1], 21)
+            cs = ax.contourf(xx, yy, z_pred, levels, cmap=colors.red_blue, alpha=.8)
+            fig.colorbar(cs, ax=ax, shrink=0.9)
+        ax.scatter(X[:, idx_x], X[:, idx_y], c=z, cmap=colors.red_blue, vmin=zlim[0], vmax=zlim[1], edgecolors='k', **kwargs)
+
+    if feature_names is not None:
+        ax.set_xlabel(feature_names[idx_x])
+        ax.set_ylabel(feature_names[idx_y])
+    ax.set_title(title)

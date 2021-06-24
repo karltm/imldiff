@@ -1,92 +1,48 @@
+from typing import Iterable
 import shap
 from shap.maskers import Independent
+from shap.utils import hclust_ordering
+from shap.plots import colors
 import numpy as np
+import matplotlib.pyplot as plt
 import warnings
 from types import SimpleNamespace
+from comparers import ModelComparer
+from IPython.display import display
 
 
-class BaseExplanationsNamespace(SimpleNamespace):
+def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display: np.ndarray = None,
+                               explanation_types: Iterable[str] = None, space_types: Iterable[str] = None,
+                               algorithm = 'auto', masker: shap.maskers.Masker = None):
+    """ Generate SHAP values for difference classifier
 
-    def __getitem__(self, *args, **kwargs):
-        return self.__class__(**dict([(k, v.__getitem__(*args, **kwargs)) for k, v in self.__dict__.items()]))
+    :param comparer: model comparison helper
+    :param X: dataset to generate SHAP values for
+    :param X_display: dataset with same shape as X, which is used for plots
+                      and may contain descriptive categorical values
+    :param explanation_types: list of types of explanations to generate
+                              'indiv' - individual models' SHAP values
+                              'indiv_diff' - difference between individual models' SHAP values
+                              'bin_diff' - SHAP values of binary difference classifier
+                              'mclass_diff' - SHAP values of multiclass difference classifier
+    :param space_types: list of types of spaces for which to generate SHAP values for
+                        'labels' - predicted labels (hard decision boundary)
+                        'proba' - predicted probabilities (soft decision boundary)
+                        'log_odds' - predicted log odds (soft decision boundary)
+    :param algorithm: SHAP value generation algorithm. See shap.Explainer for possible values
+    :param masker: If you want to customize the masker used during SHAP value generation that masks out features.
+                   Default: shap.maskers.Independent(data=X)
 
-    @property
-    def data(self):
-        return next(iter(self.__dict__.values())).data
+    :return tuple consisting of:
+            explanations - sliceable container of SHAP values for all requested kinds
+            indices_nonfinite_predictions - indices of predictions that were filtered because
+                                            of non-finite model predictions
+            explanations_nonfinite - SHAP values that were filtered because of non-finite SHAP values
 
-    @property
-    def display_data(self):
-        return next(iter(self.__dict__.values())).display_data
-
-    @property
-    def feature_names(self):
-        return next(iter(self.__dict__.values())).feature_names
-
-    @property
-    def merged(self):
-        return merge_explanations(**self.__dict__)
-
-
-def merge_explanations(**explanations):
-    names = []
-    values = []
-    base_values = []
-    for k, v in explanations.items():
-        if isinstance(v, BaseExplanationsNamespace):
-            v = v.merged
-        v = ensure_shap_values_are_3d(v)
-        names += [f'{k}.{name}' for name in v.output_names]
-        values.append(v.values)
-        base_values.append(v.base_values)
-    values = np.concatenate(values, axis=2)
-    base_values = np.concatenate(base_values, axis=1)
-    first = next(iter(explanations.values()))
-    return shap.Explanation(values, base_values, first.data, first.display_data,
-                            feature_names=first.feature_names, output_names=names)
-
-
-def ensure_are_shap_values(shap_values):
-    if isinstance(shap_values, BaseExplanationsNamespace):
-        return shap_values.merged
-    return shap_values
-
-
-def ensure_shap_values_are_3d(shap_values):
-    shap_values = ensure_are_shap_values(shap_values)
-    if len(shap_values.shape) == 3:
-        return shap_values
-    if len(shap_values.shape) == 2:
-        if shap_values.output_names is not None:
-            names = [shap_values.output_names]
-        else:
-            names = None
-        values = shap_values.values.reshape((shap_values.shape[0], shap_values.shape[1], 1))
-        base_values = shap_values.base_values.reshape((shap_values.shape[0], 1))
-        return shap.Explanation(values, base_values, shap_values.data, shap_values.display_data,
-                                feature_names=shap_values.feature_names, output_names=names)
-    raise Exception(f'invalid dimensions: {len(shap_values.shape)}')
-
-
-def ensure_all_shap_values_are_3d(*shap_values):
-    return tuple([ensure_shap_values_are_3d(s) for s in shap_values])
-
-
-class SameTypeExplanationsNamespace(BaseExplanationsNamespace):
-
-    @property
-    def shape(self):   
-        return next(iter(self.__dict__.values())).shape
-
-
-class VariousTypeExplanationsNamespace(BaseExplanationsNamespace):
-
-    @property
-    def shape(self):   
-        return next(iter(self.__dict__.values())).shape[:2]
-
-
-def generate_shap_explanations(comparer, X, X_display=None, explanation_types=None, space_types=None,
-                               algorithm='auto', masker=None):
+            the sliceable container contains in the first level the explanation types
+            and in the second level the space types and for individual explanations another level for each model.
+            To access the probability SHAP values of classifier A: explanations.indiv.proba.A
+    """
     if space_types is None:
         space_types = ['labels', 'proba', 'log_odds']
     if explanation_types is None:
@@ -96,11 +52,13 @@ def generate_shap_explanations(comparer, X, X_display=None, explanation_types=No
 
     instance_names = np.arange(X.shape[0])
     explainers = _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm, masker)
-    instance_names, X, X_display = _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, X_display)
+    instance_names, X, X_display, indices_nonfinite_predictions = \
+        _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, X_display)
     explanations = VariousTypeExplanationsNamespace()
     _make_shap_values(explanations, X, X_display, explainers)
     _derive_shap_values(explanations, comparer, explanation_types)
-    return _filter_nonfinite_shap_values(explanations, instance_names)
+    explanations, explanations_nonfinite = _filter_nonfinite_shap_values(explanations, instance_names)
+    return explanations, indices_nonfinite_predictions, explanations_nonfinite
 
 
 def _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm, masker=None):
@@ -186,10 +144,13 @@ def _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, 
     if np.sum(~filter_mask) > 0:
         warnings.warn(f'filtering instances with nonfinite predictions: {instance_names[~filter_mask]}')
         instance_names = instance_names[filter_mask]
+        indices_nonfinite_predictions = instance_names[~filter_mask]
         X = X[filter_mask, :]
         if X_display is not None:
             X_display = X_display[filter_mask, :]
-    return instance_names, X, X_display
+    else:
+        indices_nonfinite_predictions = np.array([])
+    return instance_names, X, X_display, indices_nonfinite_predictions
 
 
 def _make_nonfinite_predictions_mask_for_explainer(explainer, X):
@@ -199,6 +160,97 @@ def _make_nonfinite_predictions_mask_for_explainer(explainer, X):
     else:
         mask = np.all(np.isfinite(y_pred), axis=1)
     return mask
+
+
+class BaseExplanationsNamespace(SimpleNamespace):
+    """ A sliceable, pickleable container for groups of SHAP values """
+
+    def __getitem__(self, *args, **kwargs):
+        return self.__class__(**dict([(k, v.__getitem__(*args, **kwargs)) for k, v in self.__dict__.items()]))
+
+    @property
+    def data(self):
+        return next(iter(self.__dict__.values())).data
+
+    @property
+    def display_data(self):
+        return next(iter(self.__dict__.values())).display_data
+
+    @property
+    def feature_names(self):
+        return next(iter(self.__dict__.values())).feature_names
+
+    @property
+    def merged(self):
+        return merge_explanations(**self.__dict__)
+
+    def cohorts(self, cohorts):
+        new_explanations = self.__class__()
+        for k, v in self.__dict__.items():
+            new_explanations.__dict__[k] = v.cohorts(cohorts)
+        return new_explanations
+
+
+def merge_explanations(**explanations):
+    names = []
+    values = []
+    base_values = []
+    for k, v in explanations.items():
+        if isinstance(v, BaseExplanationsNamespace):
+            v = v.merged
+        v = ensure_shap_values_are_3d(v)
+        names += [f'{k}.{name}' for name in v.output_names]
+        values.append(v.values)
+        base_values.append(v.base_values)
+    values = np.concatenate(values, axis=2)
+    base_values = np.concatenate(base_values, axis=1)
+    first = next(iter(explanations.values()))
+    return shap.Explanation(values, base_values, first.data, first.display_data,
+                            feature_names=first.feature_names, output_names=names)
+
+
+def ensure_are_shap_values(shap_values):
+    if isinstance(shap_values, BaseExplanationsNamespace):
+        return shap_values.merged
+    return shap_values
+
+
+def ensure_shap_values_are_3d(shap_values):
+    shap_values = ensure_are_shap_values(shap_values)
+    if len(shap_values.shape) == 3:
+        return shap_values
+    if len(shap_values.shape) == 2:
+        if shap_values.output_names is not None:
+            names = [shap_values.output_names]
+        else:
+            names = None
+        values = shap_values.values.reshape((shap_values.shape[0], shap_values.shape[1], 1))
+        base_values = shap_values.base_values.reshape((shap_values.shape[0], 1))
+        return shap.Explanation(values, base_values, shap_values.data, shap_values.display_data,
+                                feature_names=shap_values.feature_names, output_names=names)
+    raise Exception(f'invalid dimensions: {len(shap_values.shape)}')
+
+
+def ensure_all_shap_values_are_3d(*shap_values):
+    return tuple([ensure_shap_values_are_3d(s) for s in shap_values])
+
+
+class SameTypeExplanationsNamespace(BaseExplanationsNamespace):
+
+    @property
+    def shape(self):
+        return next(iter(self.__dict__.values())).shape
+
+    @property
+    def output_names(self):
+        return next(iter(self.__dict__.values())).output_names
+
+
+class VariousTypeExplanationsNamespace(BaseExplanationsNamespace):
+
+    @property
+    def shape(self):
+        return next(iter(self.__dict__.values())).shape[:2]
 
 
 def _make_shap_values(explanations, X, X_display, explainers):
@@ -253,8 +305,11 @@ def _filter_nonfinite_shap_values(explanations, instance_names):
                     filter_mask &= _make_nonfinite_shap_values_mask(shap_values)
     if np.sum(~filter_mask) > 0:
         warnings.warn(f'filtering instances with nonfinite shap values: {instance_names[~filter_mask]}')
-        return explanations[filter_mask]
-    return explanations
+        explanations = explanations[filter_mask]
+        explanations_nonfinite = explanations[~filter_mask]
+    else:
+        explanations_nonfinite = explanations[np.repeat(False, explanations.shape[0])]
+    return explanations, explanations_nonfinite
 
 
 def _make_nonfinite_shap_values_mask(shap_values):
@@ -262,3 +317,211 @@ def _make_nonfinite_shap_values_mask(shap_values):
         return np.all(np.isfinite(shap_values.values), axis=1)
     else:
         return np.all(np.all(np.isfinite(shap_values.values), axis=2), axis=1)
+
+
+def calc_feature_order(shap_values):
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    values = np.abs(shap_values.values).mean(axis=2).mean(axis=0)
+    feature_order = np.flip(values.argsort())
+    feature_importance = shap.Explanation(values, feature_names=shap_values.feature_names)
+    return feature_order, feature_importance
+
+
+def calc_class_order(shap_values, information_threshold_pct=0.9):
+    if not len(shap_values.shape) == 3:
+        raise Exception('only multiclass kinds allowed')
+    class_importances = np.abs(shap_values.values).mean(axis=1).mean(axis=0)
+    class_order = np.flip(np.argsort(class_importances))
+    class_importances_cumulated = np.cumsum(class_importances[class_order])
+    total_importance = np.sum(class_importances)
+    proportional_importances = class_importances_cumulated / total_importance
+    n_informative_classes = 1 + np.where(proportional_importances > information_threshold_pct)[0][0]
+    return class_order, class_importances, n_informative_classes
+    # TODO: plot results
+
+
+def calc_instance_order(shap_values):
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    values = shap_values.values.reshape(
+        (shap_values.values.shape[0],
+         shap_values.values.shape[1] * shap_values.values.shape[2]))
+    instance_order = np.argsort(hclust_ordering(values))
+    return instance_order
+
+
+def plot_2d(*shap_values, title=None, x=0, y=1, **kwargs):
+    shap_values = ensure_all_shap_values_are_3d(*shap_values)
+    ncols = sum([s.shape[2] for s in shap_values])
+    nrows = shap_values[0].shape[1]
+    fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True, sharex=True, sharey=True)
+    plot_idx = 0
+    fig.suptitle(title, fontsize=16)
+    for feature_idx in range(nrows):
+        vmax = np.max([np.abs(s[:, feature_idx, :].values).flatten().max(0) for s in shap_values])
+        for s in shap_values:
+            display_shap_values = s[:, [x, y], :]
+            X_display = _get_display_data(display_shap_values)
+            for class_idx in range(s.shape[2]):
+                ax = axs.flat[plot_idx]
+                cs = ax.scatter(X_display[:, 0],
+                                X_display[:, 1],
+                                c=s.values[:, feature_idx, class_idx],
+                                vmin=-vmax, vmax=vmax,
+                                cmap=colors.red_blue,
+                                **kwargs)
+                ax.set_title(f'SHAP-values of {s.feature_names[feature_idx]} '
+                             f'for {s.output_names[class_idx]}')
+                ax.set_xlabel(display_shap_values.feature_names[0])
+                ax.set_ylabel(display_shap_values.feature_names[1])
+                plot_idx += 1
+        fig.colorbar(cs, ax=ax, shrink=0.9)
+    plt.show()
+
+
+def _get_display_data(shap_values):
+    if shap_values.display_data is not None:
+        return shap_values.display_data
+    else:
+        return shap_values.data
+
+
+def plot_feature_importance_bar(shap_values, title=None, feature_order=None):
+    shap_values = ensure_are_shap_values(shap_values)
+    if len(shap_values.shape) <= 2:
+        return _plot_feature_importance_bar_singleclass(shap_values, title, feature_order)
+    elif len(shap_values.shape) == 3:
+        return _plot_feature_importance_bar_multiclass(shap_values, title)
+    raise Exception(f'invalid dimensions: {shap_values.shape}')
+
+
+def _plot_feature_importance_bar_singleclass(shap_values, title=None, feature_order=None):
+    if feature_order is None:
+        if len(shap_values.shape) == 2:
+            feature_order = range(shap_values.shape[1])
+        elif len(shap_values.shape) == 1:
+            feature_order = np.flip(np.argsort(shap_values.values))
+    plt.title(title)
+    shap.plots.bar(shap_values, order=feature_order, max_display=len(feature_order))
+
+
+def _plot_feature_importance_bar_multiclass(shap_values, title=None):
+    shap_values_list = [values.T for values in shap_values.values.T]
+    shap.summary_plot(shap_values_list, shap_values.data,
+                      feature_names=shap_values.feature_names,
+                      class_names=shap_values.output_names, show=False)
+    plt.legend(loc='right')
+    plt.title(title)
+    plt.show()
+
+
+def plot_feature_importance_scatter(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
+    shap_values = ensure_are_shap_values(shap_values)
+    if len(shap_values.shape) == 2:
+        return _plot_feature_importance_scatter_singleclass(shap_values, title, feature_order, **kwargs)
+    elif len(shap_values.shape) == 3:
+        return _plot_feature_importance_scatter_multiclass(shap_values, title, feature_order, class_order, **kwargs)
+    raise Exception(f'invalid dimensions: {shap_values.shape}')
+
+
+def _plot_feature_importance_scatter_singleclass(shap_values, title=None, feature_order=None, **kwargs):
+    if feature_order is None:
+        feature_order = range(shap_values.shape[1])
+    plt.title(title)
+    shap.plots.beeswarm(shap_values, order=feature_order, plot_size=(14, 7), **kwargs)
+
+
+def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
+    if feature_order is None:
+        feature_order = range(shap_values.shape[1])
+    if class_order is None:
+        class_order = range(shap_values.shape[2])
+    plt.suptitle(title, fontsize='x-large')
+    for feature_idx in feature_order:
+        new_values = shap_values.values[:, feature_idx, :]
+        new_data = np.reshape(np.repeat(shap_values.data[:, feature_idx], len(class_order)),
+                              (shap_values.data.shape[0], len(class_order)))
+        if shap_values.display_data is not None:
+            new_display_data = np.reshape(np.repeat(shap_values.display_data[:, feature_idx], len(class_order)),
+                                          (shap_values.data.shape[0], len(class_order)))
+        else:
+            new_display_data = None
+        new_base_values = shap_values.base_values
+        shap_values_ = shap.Explanation(new_values, new_base_values, new_data, new_display_data,
+                                        feature_names=shap_values.output_names)
+        shap.plots.beeswarm(shap_values_, plot_size=(14, 7), show=False, **kwargs)
+        plt.title(shap_values.feature_names[feature_idx])
+        plt.show()
+
+
+def plot_feature_effects(*shap_values, title=None, **kwargs):
+    """ Plot marginal effect of each feature vs. its SHAP values per class.
+
+    Further keyword arguments are passed to shap.plots.scatter,
+    and may include e.g. color=is_pred_diff, alpha=0.2
+    """
+    shap_values = ensure_all_shap_values_are_3d(*shap_values)
+    ncols = sum([s.shape[2] for s in shap_values])
+    nrows = shap_values[0].shape[1]
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='row', sharey='row', figsize=(9 * ncols, 7 * nrows))
+    fig.suptitle(title, fontsize='x-large', y=0.91)
+    plot_idx = 0
+    for feature_idx in range(nrows):
+        xmin = np.min([s.data[:, feature_idx].min(0) for s in shap_values])
+        xmax = np.max([s.data[:, feature_idx].max(0) for s in shap_values])
+        ymin = np.min([s.values[:, feature_idx, :].flatten().min(0) for s in shap_values])
+        ymax = np.max([s.values[:, feature_idx, :].flatten().max(0) for s in shap_values])
+        for s in shap_values:
+            for class_idx in range(s.shape[2]):
+                shap.plots.scatter(s[:, feature_idx, class_idx], title=s.output_names[class_idx],
+                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
+                                   ax=axs.flat[plot_idx], show=False, **kwargs)
+                plot_idx += 1
+    plt.show()
+
+
+def plot_forces(shap_values, title=None, instance_order=None, class_order=None, **kwargs):
+    """ Create force plots of all instances
+
+    Further keyword arguments are passed to shap plot function
+    e.g. link='logit'
+    """
+    shap_values = ensure_are_shap_values(shap_values)
+    if len(shap_values.shape) <= 2:
+        return plot_forces_singleclass(shap_values, title, instance_order, **kwargs)
+    if len(shap_values.shape) == 3:
+        return plot_forces_multiclass(shap_values, instance_order, class_order, **kwargs)
+    raise Exception(f'invalid dimensions: {shap_values.shape}')
+
+
+def plot_forces_singleclass(shap_values, title=None, instance_order=None, **kwargs):
+    if instance_order is not None and isinstance(instance_order, np.ndarray):
+        instance_order = instance_order.tolist()
+    X_display = _get_display_data(shap_values)
+    plot = shap.plots.force(
+        base_value=shap_values.base_values[0],
+        shap_values=shap_values.values,
+        features=X_display,
+        feature_names=shap_values.feature_names,
+        out_names=title,
+        ordering_keys=instance_order,
+        **kwargs)
+    display(plot)
+
+
+def plot_forces_multiclass(shap_values, instance_order=None, class_order=None, **kwargs):
+    if class_order is None:
+        class_order = range(shap_values.shape[2])
+    if instance_order is not None and isinstance(instance_order, np.ndarray):
+        instance_order = instance_order.tolist()
+    X_display = _get_display_data(shap_values)
+    for class_idx in class_order:
+        shap_values_ = shap_values[:, :, class_idx]
+        plot = shap.plots.force(
+            base_value=shap_values_.base_values[0],
+            shap_values=shap_values_.values,
+            features=X_display,
+            feature_names=shap_values.feature_names,
+            out_names=str(shap_values_.output_names),
+            ordering_keys=instance_order,
+            **kwargs)
+        display(plot)

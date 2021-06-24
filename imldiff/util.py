@@ -2,7 +2,7 @@ from sklearn.metrics import brier_score_loss, precision_score, recall_score, f1_
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LogisticRegression
 from matplotlib import pyplot as plt
-
+from sklearn.tree import _tree
 
 def calibrate_classifier(est, name, X_train, X_test, y_train, y_test, cv=10, fig_index=1):
     """Plot calibration curve for est w/o and with calibration. """
@@ -61,3 +61,49 @@ def calibrate_classifier(est, name, X_train, X_test, y_train, y_test, cv=10, fig
     plt.tight_layout()
 
     return isotonic, sigmoid
+
+
+def get_rules(tree, feature_names):
+    """ source: https://mljar.com/blog/extract-rules-decision-tree/ """
+    tree_ = tree.tree_
+    feature_name = [
+        feature_names[i] if i != _tree.TREE_UNDEFINED else "undefined!"
+        for i in tree_.feature
+    ]
+
+    paths = []
+    path = []
+
+    def recurse(node, path, paths):
+
+        if tree_.feature[node] != _tree.TREE_UNDEFINED:
+            name = feature_name[node]
+            threshold = tree_.threshold[node]
+            p1, p2 = list(path), list(path)
+            p1 += [f"({name} <= {np.round(threshold, 3)})"]
+            recurse(tree_.children_left[node], p1, paths)
+            p2 += [f"({name} > {np.round(threshold, 3)})"]
+            recurse(tree_.children_right[node], p2, paths)
+        else:
+            path += [(tree_.value[node], tree_.n_node_samples[node])]
+            paths += [path]
+
+    recurse(0, path, paths)
+
+    # sort by samples count
+    samples_count = [p[-1][1] for p in paths]
+    ii = list(np.argsort(samples_count))
+    paths = [paths[i] for i in reversed(ii)]
+
+    rules = []
+    for path in paths:
+        rule = ""
+
+        for p in path[:-1]:
+            if rule != "":
+                rule += " & "
+            rule += str(p)
+        rule += f" [{path[-1][1]:,} samples]"
+        rules += [rule]
+
+    return rules

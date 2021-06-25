@@ -433,22 +433,20 @@ def _plot_feature_importance_scatter_singleclass(shap_values, title=None, featur
 def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
-    if class_order is None:
-        class_order = range(shap_values.shape[2])
     plt.suptitle(title, fontsize='x-large')
     for feature_idx in feature_order:
         new_values = shap_values.values[:, feature_idx, :]
-        new_data = np.reshape(np.repeat(shap_values.data[:, feature_idx], len(class_order)),
-                              (shap_values.data.shape[0], len(class_order)))
+        new_data = np.reshape(np.repeat(shap_values.data[:, feature_idx], shap_values.shape[2]),
+                              (shap_values.data.shape[0], shap_values.shape[2]))
         if shap_values.display_data is not None:
-            new_display_data = np.reshape(np.repeat(shap_values.display_data[:, feature_idx], len(class_order)),
-                                          (shap_values.data.shape[0], len(class_order)))
+            new_display_data = np.reshape(np.repeat(shap_values.display_data[:, feature_idx], shap_values.shape[2]),
+                                          (shap_values.data.shape[0], shap_values.shape[2]))
         else:
             new_display_data = None
         new_base_values = shap_values.base_values
         shap_values_ = shap.Explanation(new_values, new_base_values, new_data, new_display_data,
                                         feature_names=shap_values.output_names)
-        shap.plots.beeswarm(shap_values_, plot_size=(14, 7), show=False, **kwargs)
+        shap.plots.beeswarm(shap_values_, order=class_order, plot_size=(14, 7), show=False, **kwargs)
         plt.title(shap_values.feature_names[feature_idx])
         plt.show()
 

@@ -433,6 +433,8 @@ def _plot_feature_importance_scatter_singleclass(shap_values, title=None, featur
 def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
+    if class_order is None:
+        class_order = np.arange(shap_values.shape[2])
     plt.suptitle(title, fontsize='x-large')
     for feature_idx in feature_order:
         new_values = shap_values.values[:, feature_idx, :]

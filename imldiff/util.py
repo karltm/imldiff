@@ -3,6 +3,7 @@ from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LogisticRegression
 from matplotlib import pyplot as plt
 from sklearn.tree import _tree
+import numpy as np
 
 def calibrate_classifier(est, name, X_train, X_test, y_train, y_test, cv=10, fig_index=1):
     """Plot calibration curve for est w/o and with calibration. """

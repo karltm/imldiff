@@ -127,3 +127,5 @@ src/version.ts
 *.expl
 *.models
 *.dataset
+*.tree
+*.diro2c

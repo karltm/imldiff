@@ -42,6 +42,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         """
         Predict probabilities for the two classes, the output shape is (n, 2)
         """
+        assert len(self.clf_a.classes_) == 2, 'Probability estimates are only available for binary base classifiers'
         check_is_fitted(self)
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
@@ -54,6 +55,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         Predict log-probabilities instead of probabilities for the two classes,
         the output shape is (n, 2)
         """
+        assert len(self.clf_a.classes_) == 2, 'Log probability estimates are only available for binary base classifiers'
         check_is_fitted(self)
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)
@@ -153,4 +155,3 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         log_proba_a_expanded = np.repeat(log_proba_a, len(self.base_classes_), axis=1)
         log_proba_b_expanded = np.reshape(np.repeat(log_proba_b, len(self.base_classes_), axis=0), log_proba_a_expanded.shape)
         return log_proba_a_expanded + log_proba_b_expanded
-    

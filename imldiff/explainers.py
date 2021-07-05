@@ -453,7 +453,7 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         plt.show()
 
 
-def plot_feature_effects(*shap_values, title=None, **kwargs):
+def plot_feature_effects(*shap_values, title=None, highlight=None, **kwargs):
     """ Plot marginal effect of each feature vs. its SHAP values per class.
 
     Further keyword arguments are passed to shap.plots.scatter,
@@ -472,9 +472,14 @@ def plot_feature_effects(*shap_values, title=None, **kwargs):
         ymax = np.max([s.values[:, feature_idx, :].flatten().max(0) for s in shap_values])
         for s in shap_values:
             for class_idx in range(s.shape[2]):
+                ax = axs if ncols == 1 and nrows == 1 else axs.flat[plot_idx]
                 shap.plots.scatter(s[:, feature_idx, class_idx], title=s.output_names[class_idx],
                                    xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
-                                   ax=axs.flat[plot_idx], show=False, **kwargs)
+                                   ax=ax, show=False, **kwargs)
+                if highlight is not None:
+                    shap.plots.scatter(s[highlight, feature_idx, class_idx], title=s.output_names[class_idx],
+                                       xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
+                                       ax=ax, show=False, color='r', hist=False, **kwargs)
                 plot_idx += 1
     plt.show()
 

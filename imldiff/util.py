@@ -108,3 +108,7 @@ def get_rules(tree, feature_names):
         rules += [rule]
 
     return rules
+
+
+def index_of(array, element):
+    return np.where(array == element)[0][0]

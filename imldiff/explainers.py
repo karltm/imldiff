@@ -4,6 +4,8 @@ from shap.maskers import Independent
 from shap.utils import hclust_ordering
 from shap.plots import colors
 import numpy as np
+import scipy as sp
+import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
 from types import SimpleNamespace
@@ -530,3 +532,57 @@ def plot_forces_multiclass(shap_values, instance_order=None, class_order=None, *
             ordering_keys=instance_order,
             **kwargs)
         display(plot)
+
+
+def plot_decision(shap_values, classes=None, **kwargs):
+    shap_values = ensure_are_shap_values(shap_values)
+    if len(shap_values.shape) == 2:
+        plot_decision_singleclass(shap_values, **kwargs)
+    elif len(shap_values.shape) == 3:
+        if classes is None:
+            classes = shap_values.output_names
+        for class_ in classes:
+            plot_decision_singleclass(shap_values[:, :, class_], **kwargs)
+    else:
+        raise Exception(f'invalid dimensions: {shap_values.shape}')
+
+
+def plot_decision_singleclass(shap_values, **kwargs):
+    plt.title(shap_values.output_names)
+    shap.decision_plot(shap_values.base_values[0], shap_values.values, shap_values.feature_names, **kwargs)
+
+
+def perform_hierarchical_clustering(shap_values):
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    values = shap_values.values.reshape(
+        (shap_values.values.shape[0],
+         shap_values.values.shape[1] * shap_values.values.shape[2]))
+    D = sp.spatial.distance.pdist(values, metric='sqeuclidean')
+    linkage_matrix = sp.cluster.hierarchy.complete(D)
+    return linkage_matrix
+
+
+def plot_dendrogram(linkage_matrix):
+    fig, ax = plt.subplots(figsize=(7, 7))
+    sp.cluster.hierarchy.dendrogram(linkage_matrix, orientation='right', ax=ax, no_labels=True)
+    ax.set_title('Dendrogram')
+    plt.show()
+
+
+def extract_clustering(linkage_matrix, n_clusters):
+    cluster_names = np.array([f'c{idx}' for idx in range(1, n_clusters+1)])
+    clustering = sp.cluster.hierarchy.fcluster(linkage_matrix, t=n_clusters, criterion='maxclust')
+    clustering -= 1
+    return clustering, cluster_names
+
+
+def get_class_occurences_in_clusters(explanations_clustered, cluster_names, comparer):
+    occurences = pd.DataFrame(np.zeros((len(cluster_names), comparer.classes.shape[0]), dtype=int),
+                              index=cluster_names, columns=comparer.class_names)
+    for cluster, data in explanations_clustered.mclass_diff.labels.data.cohorts.items():
+        mclass_diff_ = comparer.predict_mclass_diff(data)
+        indices, counts = np.unique(mclass_diff_, return_counts=True)
+        occurences.loc[cluster, :].iloc[indices] = counts
+    has_diff_classes = occurences.loc[:, comparer.difference_class_names].sum(1) > 0
+    clusters_of_interest = occurences.index[has_diff_classes].to_numpy()
+    return occurences, clusters_of_interest

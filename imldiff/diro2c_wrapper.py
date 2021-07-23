@@ -65,3 +65,11 @@ def plot_diro2c_tree(explanation, **kwargs):
     feature_names = evaluation_info['df_diff'].columns[1:].to_numpy()
     dc_full = explanation['binary_diff_classifer']['dc_full']
     plot_tree(dc_full, feature_names=feature_names, **kwargs)
+
+
+def print_diro2c_rules(explanation):
+    evaluation_info = explanation['binary_diff_classifer']['evaluation_info']
+    feature_names = evaluation_info['df_diff'].columns[1:].to_numpy()
+    dc_full = explanation['binary_diff_classifer']['dc_full']
+    class_names = ['no_diff', 'diff']
+    rule_extractor.print_rules_for_binary(dc_full, feature_names, class_names, 'diff')

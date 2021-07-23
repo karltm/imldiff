@@ -478,7 +478,7 @@ def plot_feature_effects(*shap_values, title=None, highlight=None, **kwargs):
                 shap.plots.scatter(s[:, feature_idx, class_idx], title=s.output_names[class_idx],
                                    xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
                                    ax=ax, show=False, **kwargs)
-                if highlight is not None:
+                if highlight is not None and np.sum(highlight) > 0:
                     shap.plots.scatter(s[highlight, feature_idx, class_idx], title=s.output_names[class_idx],
                                        xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
                                        ax=ax, show=False, color='r', hist=False, **kwargs)

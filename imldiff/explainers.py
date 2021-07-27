@@ -586,3 +586,11 @@ def get_class_occurences_in_clusters(explanations_clustered, cluster_names, comp
     has_diff_classes = occurences.loc[:, comparer.difference_class_names].sum(1) > 0
     clusters_of_interest = occurences.index[has_diff_classes].to_numpy()
     return occurences, clusters_of_interest
+
+
+def plot_feature_influence_comparison(shap_values, instances_mask):
+    confused_values = shap_values[instances_mask, :, :].mean(0).values
+    not_confused_values = shap_values[~instances_mask, :, :].mean(0).values
+    for feature_name, cv, ncv in zip(shap_values.feature_names, confused_values, not_confused_values):
+        df = pd.DataFrame([cv, ncv], columns=shap_values.output_names, index=['confused', 'not confused'])
+        df.plot.bar(title=feature_name, ylabel='mean(SHAP value)')

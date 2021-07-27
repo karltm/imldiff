@@ -329,17 +329,17 @@ def calc_feature_order(shap_values):
     return feature_order, feature_importance
 
 
-def calc_class_order(shap_values, information_threshold_pct=0.9):
+def calc_class_order(shap_values):
     if not len(shap_values.shape) == 3:
         raise Exception('only multiclass kinds allowed')
     class_importances = np.abs(shap_values.values).mean(axis=1).mean(axis=0)
     class_order = np.flip(np.argsort(class_importances))
-    class_importances_cumulated = np.cumsum(class_importances[class_order])
-    total_importance = np.sum(class_importances)
-    proportional_importances = class_importances_cumulated / total_importance
-    n_informative_classes = 1 + np.where(proportional_importances > information_threshold_pct)[0][0]
-    return class_order, class_importances, n_informative_classes
-    # TODO: plot results
+    return class_order, class_importances
+
+
+def plot_class_importances(class_importances, class_order, class_names):
+    df = pd.DataFrame(class_importances[class_order], index=np.array(class_names)[class_order])
+    df.plot.bar(title='Class importances', ylabel='mean(|SHAP value|)')
 
 
 def calc_instance_order(shap_values):
@@ -588,7 +588,9 @@ def get_class_occurences_in_clusters(explanations_clustered, cluster_names, comp
     return occurences, clusters_of_interest
 
 
-def plot_feature_influence_comparison(shap_values, instances_mask):
+def plot_feature_influence_comparison(shap_values, instances_mask, feature_order=None, class_order=None):
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    shap_values = shap_values[:, feature_order][:, :, class_order]
     confused_values = shap_values[instances_mask, :, :].mean(0).values
     not_confused_values = shap_values[~instances_mask, :, :].mean(0).values
     for feature_name, cv, ncv in zip(shap_values.feature_names, confused_values, not_confused_values):

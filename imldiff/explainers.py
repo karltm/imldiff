@@ -592,7 +592,10 @@ def plot_feature_influence_comparison(shap_values, instances_mask, feature_order
     shap_values = ensure_shap_values_are_3d(shap_values)
     shap_values = shap_values[:, feature_order][:, :, class_order]
     confused_values = shap_values[instances_mask, :, :].mean(0).values
-    not_confused_values = shap_values[~instances_mask, :, :].mean(0).values
+    if np.sum(~instances_mask) > 0:
+        not_confused_values = shap_values[~instances_mask, :, :].mean(0).values
+    else:
+        not_confused_values = np.zeros(confused_values.shape)
     for feature_name, cv, ncv in zip(shap_values.feature_names, confused_values, not_confused_values):
         df = pd.DataFrame([cv, ncv], columns=shap_values.output_names, index=['confused', 'not confused'])
         df.plot.bar(title=feature_name, ylabel='mean(SHAP value)')

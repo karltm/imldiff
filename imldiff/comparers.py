@@ -19,8 +19,7 @@ class ModelComparer:
         self.mclass_diff_clf = MulticlassDifferenceClassifier(clf_a, clf_b)
         
     def fit(self, X, y):
-        self.bin_diff_clf.fit(X, y)
-        self.mclass_diff_clf.fit(X, y)
+        return self
  
     @property
     def classifiers(self):

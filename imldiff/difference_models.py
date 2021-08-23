@@ -15,24 +15,22 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
     predict the same class (False) or a different class (True)
     """
    
-    def  __init__(self, clf_a, clf_b, fit_classifiers=False):
+    def  __init__(self, clf_a, clf_b):
+        check_is_fitted(clf_a)
+        check_is_fitted(clf_b)
+        if not np.array_equal(clf_a.classes_, clf_b.classes_):
+            raise Exception('Classes of base classifiers need to be the same')
         self.clf_a = clf_a
         self.clf_b = clf_b
-        self.fit_classifiers = fit_classifiers
+        self.classes_ = np.array([False, True])
 
     def fit(self, X, y):
-        if self.fit_classifiers:
-            self.clf_a.fit(X, y)
-            self.clf_b.fit(X, y)
-        X, y = check_X_y(X, y)
-        self.classes_ = np.array([False, True])
         return self
 
     def predict(self, X):
         """
         Predict class labels, output shape is (n,)
         """
-        check_is_fitted(self)
         X = check_array(X)
         pred_a = self.clf_a.predict(X)
         pred_b = self.clf_b.predict(X)
@@ -42,8 +40,8 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         """
         Predict probabilities for the two classes, the output shape is (n, 2)
         """
-        assert len(self.clf_a.classes_) == 2, 'Probability estimates are only available for binary base classifiers'
-        check_is_fitted(self)
+        if not len(self.clf_a.classes_) == 2:
+            raise Exception('Probability estimates are only available for binary base classifiers')
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
@@ -55,8 +53,8 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         Predict log-probabilities instead of probabilities for the two classes,
         the output shape is (n, 2)
         """
-        assert len(self.clf_a.classes_) == 2, 'Log probability estimates are only available for binary base classifiers'
-        check_is_fitted(self)
+        if not len(self.clf_a.classes_) == 2:
+            raise Exception('Probability estimates are only available for binary base classifiers')
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)
         log_proba_b = self.clf_b.predict_log_proba(X)
@@ -100,30 +98,26 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
     - `class_tuples_: numpy array of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
     """
     
-    def  __init__(self, clf_a, clf_b, fit_classifiers=False):
+    def  __init__(self, clf_a, clf_b):
+        check_is_fitted(clf_a)
+        check_is_fitted(clf_b)
+        if not np.array_equal(clf_a.classes_, clf_b.classes_):
+            raise Exception('Classes of base classifiers need to be the same')
         self.clf_a = clf_a
         self.clf_b = clf_b
-        self.fit_classifiers = fit_classifiers
-
-    def fit(self, X, y):
-        if self.fit_classifiers:
-            self.clf_a.fit(X, y)
-            self.clf_b.fit(X, y)
-        if not np.array_equal(self.clf_a.classes_, self.clf_b.classes_):
-            raise Exception(f'Classes do not match: clf_a={self.clf_a.classes_}, clf_b={self.clf_a.classes_}')
-        X, y = check_X_y(X, y) 
-        self.base_classes_ = unique_labels(y)
+        self.base_classes_ = clf_a.classes_
         self.classes_ = np.arange(np.square(len(self.base_classes_)))
         self.equality_classes_ = np.diagonal(self.classes_.reshape((len(self.base_classes_), len(self.base_classes_))))
         self.difference_classes_ = np.setdiff1d(self.classes_, self.equality_classes_)
         self.class_tuples_ = np.array(list(itertools.product(self.base_classes_, self.base_classes_)), dtype='object,object').astype(object)
+
+    def fit(self, X, y):
         return self
 
     def predict(self, X):
         """
         Predict difference class labels, the output shape is (n,).
         """
-        check_is_fitted(self)
         X = check_array(X)
         pred_a = self.clf_a.predict(X)
         pred_b = self.clf_b.predict(X)
@@ -135,7 +129,6 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         """
         Predict probabilities for the difference classes, the output shape is (n, m)
         """
-        check_is_fitted(self)
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
@@ -148,7 +141,6 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         Predict log-probabilities instead of probabilities for the difference classes,
         the output shape is (n, m)
         """
-        check_is_fitted(self)
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)
         log_proba_b = self.clf_b.predict_log_proba(X)

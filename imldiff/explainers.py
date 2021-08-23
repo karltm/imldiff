@@ -579,7 +579,7 @@ def extract_clustering(linkage_matrix, n_clusters):
 def get_class_occurences_in_clusters(explanations_clustered, cluster_names, comparer):
     occurences = pd.DataFrame(np.zeros((len(cluster_names), comparer.classes.shape[0]), dtype=int),
                               index=cluster_names, columns=comparer.class_names)
-    for cluster, data in explanations_clustered.mclass_diff.labels.data.cohorts.items():
+    for cluster, data in explanations_clustered.data.cohorts.items():
         mclass_diff_ = comparer.predict_mclass_diff(data)
         indices, counts = np.unique(mclass_diff_, return_counts=True)
         occurences.loc[cluster, :].iloc[indices] = counts

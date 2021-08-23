@@ -11,14 +11,19 @@ from util import index_of
 import matplotlib.pyplot as plt
 
 
+class_names = ['no_diff', 'diff']
+
+
 class CombinationClassifier:
     def __init__(self, comparer, label_explain_a, label_explain_b):
         self.comparer = comparer
         self.label_explain_a = label_explain_a
         self.label_explain_b = label_explain_b
+
     def predict(self, X):
         return (self.comparer.clf_a.predict(X) == self.label_explain_a) & \
                (self.comparer.clf_b.predict(X) == self.label_explain_b)
+
 
 class ConstantClassifier:
     def predict(self, X):
@@ -43,10 +48,14 @@ def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class):
 
 
 def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None):
-    evaluation_info = explanation['binary_diff_classifer']['evaluation_info']
-    X_diff, y_diff = evaluation_info['X'], evaluation_info['y']
-    feature_names = evaluation_info['df_diff'].columns[1:].to_numpy()
-    idx_x, idx_y = index_of(feature_names, feature_x), index_of(feature_names, feature_y)
+    X_diff, y_diff = _get_X_and_y(explanation)
+    feature_names = _get_feature_names(explanation)
+    if isinstance(feature_x, str) and isinstance(feature_y, str):
+        idx_x, idx_y = index_of(feature_names, feature_x), index_of(feature_names, feature_y)
+    else:
+        idx_x, idx_y = feature_x, feature_y
+        feature_x = feature_names[idx_x]
+        feature_y = feature_names[idx_y]
     fig, ax = plt.subplots(figsize=(7, 7))
     ax.set_xlabel(feature_x)
     ax.set_ylabel(feature_y)
@@ -60,17 +69,28 @@ def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None):
     ax.legend()
 
 
-def plot_diro2c_tree(explanation, **kwargs):
+def _get_X_and_y(explanation):
     evaluation_info = explanation['binary_diff_classifer']['evaluation_info']
-    feature_names = evaluation_info['df_diff'].columns[1:].to_numpy()
-    dc_full = explanation['binary_diff_classifer']['dc_full']
-    class_names = ['no_diff', 'diff']
+    return evaluation_info['X'], evaluation_info['y']
+
+
+def _get_feature_names(explanation):
+    evaluation_info = explanation['binary_diff_classifer']['evaluation_info']
+    return evaluation_info['df_diff'].columns[1:].to_numpy()
+
+
+def plot_diro2c_tree(explanation, **kwargs):
+    feature_names = _get_feature_names(explanation)
+    dc_full = _get_decision_tree(explanation)
     plot_tree(dc_full, feature_names=feature_names, class_names=class_names, **kwargs)
 
 
-def print_diro2c_rules(explanation):
-    evaluation_info = explanation['binary_diff_classifer']['evaluation_info']
-    feature_names = evaluation_info['df_diff'].columns[1:].to_numpy()
+def _get_decision_tree(explanation):
     dc_full = explanation['binary_diff_classifer']['dc_full']
-    class_names = ['no_diff', 'diff']
+    return dc_full
+
+
+def print_diro2c_rules(explanation):
+    feature_names = _get_feature_names(explanation)
+    dc_full = _get_decision_tree(explanation)
     rule_extractor.print_rules_for_binary(dc_full, feature_names, class_names, 'diff')

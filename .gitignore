@@ -129,3 +129,4 @@ src/version.ts
 *.dataset
 *.tree
 *.diro2c
+*.pickle

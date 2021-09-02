@@ -1,3 +1,5 @@
+from typing import List
+
 import diro2c
 from data_generation.helper import prepare_df
 from data_generation.neighborhood_generation import neighbor_generator
@@ -10,17 +12,19 @@ import numpy as np
 from util import index_of
 import matplotlib.pyplot as plt
 
-
 class_names = ['no_diff', 'diff']
 
 
 class CombinationClassifier:
-    def __init__(self, comparer, label_explain_a, label_explain_b):
+    def __init__(self, comparer, label_explain_a, label_explain_b, factors=None):
         self.comparer = comparer
         self.label_explain_a = label_explain_a
         self.label_explain_b = label_explain_b
+        self.factors = factors
 
     def predict(self, X):
+        if self.factors is not None:
+            X = X / self.factors
         return (self.comparer.clf_a.predict(X) == self.label_explain_a) & \
                (self.comparer.clf_b.predict(X) == self.label_explain_b)
 
@@ -30,9 +34,18 @@ class ConstantClassifier:
         return np.repeat(False, X.shape[0])
 
 
-def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class):
+def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class, scale_features: dict = None):
+    if scale_features is not None:
+        factors = np.repeat(1.0, X.shape[1])
+        for feature, factor in scale_features.items():
+            idx = np.where(comparer.feature_names == feature)[0][0]
+            factors[idx] = factor
+        X = X * factors
+    else:
+        factors = None
+
     label_explain_a, label_explain_b = comparer.class_tuples[index_of(comparer.class_names, confusion_class)]
-    clf_a = CombinationClassifier(comparer, label_explain_a, label_explain_b)
+    clf_a = CombinationClassifier(comparer, label_explain_a, label_explain_b, factors)
     clf_b = ConstantClassifier()
 
     d = dict([(feature_name, feature_data)
@@ -42,12 +55,18 @@ def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class):
     df = pd.DataFrame(d)
     dataset = prepare_df(df, 'test', 'y')
 
-    return diro2c.recognize_diff(idx_explain, X, dataset, clf_a, clf_b,
-                                 diff_classifier_method_type.binary_diff_classifier,
-                                 data_generation_function=neighbor_generator.get_modified_genetic_neighborhood)
+    explanation = diro2c.recognize_diff(idx_explain, X, dataset, clf_a, clf_b,
+                                        diff_classifier_method_type.binary_diff_classifier,
+                                        data_generation_function=neighbor_generator.get_modified_genetic_neighborhood)
+
+    if factors is not None:
+        X = explanation['binary_diff_classifer']['evaluation_info']['X'].astype(float) / factors
+        explanation['binary_diff_classifer']['evaluation_info']['X'] = X
+
+    return explanation
 
 
-def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None):
+def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, highlight=None):
     X_diff, y_diff = _get_X_and_y(explanation)
     feature_names = _get_feature_names(explanation)
     if isinstance(feature_x, str) and isinstance(feature_y, str):
@@ -66,6 +85,8 @@ def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None):
     for class_idx, class_label in [(0, 'no_diff'), (1, 'diff')]:
         mask = y_diff == class_idx
         ax.scatter(X_diff[mask, idx_x], X_diff[mask, idx_y], label=class_label, alpha=0.5)
+    if highlight is not None:
+        ax.scatter(highlight[idx_x], highlight[idx_y], color='k', marker='x')
     ax.legend()
 
 

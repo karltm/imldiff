@@ -12,8 +12,6 @@ import numpy as np
 from util import index_of
 import matplotlib.pyplot as plt
 
-class_names = ['no_diff', 'diff']
-
 
 class CombinationClassifier:
     def __init__(self, comparer, label_explain_a, label_explain_b, factors=None):
@@ -35,6 +33,7 @@ class ConstantClassifier:
 
 
 def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class, scale_features: dict = None):
+    """Wrapper to generate diro2c explanation from one-vs-rest classification of the specified class"""
     if scale_features is not None:
         factors = np.repeat(1.0, X.shape[1])
         for feature, factor in scale_features.items():
@@ -63,6 +62,8 @@ def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class, scale
         X = explanation['binary_diff_classifer']['evaluation_info']['X'].astype(float) / factors
         explanation['binary_diff_classifer']['evaluation_info']['X'] = X
 
+    explanation['class_names'] = np.array(['not ' + confusion_class, confusion_class])
+
     return explanation
 
 
@@ -82,7 +83,7 @@ def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, high
         ax.set_xlim(xlim)
     if ylim is not None:
         ax.set_ylim(ylim)
-    for class_idx, class_label in [(0, 'no_diff'), (1, 'diff')]:
+    for class_idx, class_label in enumerate(explanation['class_names']):
         mask = y_diff == class_idx
         ax.scatter(X_diff[mask, idx_x], X_diff[mask, idx_y], label=class_label, alpha=0.5)
     if highlight is not None:
@@ -103,7 +104,7 @@ def _get_feature_names(explanation):
 def plot_diro2c_tree(explanation, **kwargs):
     feature_names = _get_feature_names(explanation)
     dc_full = _get_decision_tree(explanation)
-    plot_tree(dc_full, feature_names=feature_names, class_names=class_names, **kwargs)
+    plot_tree(dc_full, feature_names=feature_names, class_names=explanation['class_names'], **kwargs)
 
 
 def _get_decision_tree(explanation):
@@ -114,4 +115,4 @@ def _get_decision_tree(explanation):
 def print_diro2c_rules(explanation):
     feature_names = _get_feature_names(explanation)
     dc_full = _get_decision_tree(explanation)
-    rule_extractor.print_rules_for_binary(dc_full, feature_names, class_names, 'diff')
+    rule_extractor.print_rules_for_binary(dc_full, feature_names, explanation['class_names'], 'diff')

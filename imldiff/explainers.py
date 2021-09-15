@@ -221,20 +221,25 @@ def ensure_shap_values_are_3d(shap_values):
     shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) == 3:
         return shap_values
-    if len(shap_values.shape) == 2:
-        if shap_values.output_names is not None:
-            names = [shap_values.output_names]
-        else:
-            names = None
-        values = shap_values.values.reshape((shap_values.shape[0], shap_values.shape[1], 1))
-        base_values = shap_values.base_values.reshape((shap_values.shape[0], 1))
-        return shap.Explanation(values, base_values, shap_values.data, shap_values.display_data,
-                                feature_names=shap_values.feature_names, output_names=names)
-    raise Exception(f'invalid dimensions: {len(shap_values.shape)}')
+    if isinstance(shap_values.feature_names, str):
+        feature_names = [shap_values.feature_names]
+    else:
+        feature_names = shap_values.feature_names
+    if isinstance(shap_values.output_names, str):
+        output_names = [shap_values.output_names]
+    else:
+        output_names = shap_values.output_names
+    values = shap_values.values.reshape((shap_values.shape[0], len(feature_names), len(output_names)))
+    base_values = shap_values.base_values.reshape((shap_values.shape[0], len(output_names)))
+    return shap.Explanation(values, base_values, shap_values.data, shap_values.display_data,
+                            feature_names=feature_names, output_names=output_names)
 
 
-def ensure_all_shap_values_are_3d(*shap_values):
-    return tuple([ensure_shap_values_are_3d(s) for s in shap_values])
+def ensure_all_shap_values_are_3d(*shap_values, **kw_shap_values):
+    if len(shap_values) > 0:
+        return tuple([ensure_shap_values_are_3d(s) for s in shap_values])
+    else:
+        return dict([(k, ensure_shap_values_are_3d(s)) for k, s in kw_shap_values.items()])
 
 
 class SameTypeExplanationsNamespace(BaseExplanationsNamespace):
@@ -418,25 +423,29 @@ def _plot_feature_importance_bar_multiclass(shap_values, title=None):
 
 def plot_feature_importance_scatter(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
     shap_values = ensure_are_shap_values(shap_values)
-    if len(shap_values.shape) == 2:
+    if shap_values.output_names is None or isinstance(shap_values.output_names, str):
         return _plot_feature_importance_scatter_singleclass(shap_values, title, feature_order, **kwargs)
-    elif len(shap_values.shape) == 3:
+    else:
         return _plot_feature_importance_scatter_multiclass(shap_values, title, feature_order, class_order, **kwargs)
-    raise Exception(f'invalid dimensions: {shap_values.shape}')
 
 
-def _plot_feature_importance_scatter_singleclass(shap_values, title=None, feature_order=None, **kwargs):
+def _plot_feature_importance_scatter_singleclass(shap_values, title=None, feature_order=None, plot_size=None, **kwargs):
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
+    if plot_size is None:
+        plot_size = (18, 3)
     plt.title(title)
-    shap.plots.beeswarm(shap_values, order=feature_order, plot_size=(14, 7), **kwargs)
+    shap.plots.beeswarm(shap_values, order=feature_order, plot_size=plot_size, **kwargs)
 
 
-def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
+def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature_order=None, class_order=None,
+                                                plot_size=None, **kwargs):
     if feature_order is None:
         feature_order = range(shap_values.shape[1])
     if class_order is None:
         class_order = np.arange(shap_values.shape[2])
+    if plot_size is None:
+        plot_size = (18, 1 + shap_values.shape[2])
     plt.suptitle(title, fontsize='x-large')
     for feature_idx in feature_order:
         new_values = shap_values.values[:, feature_idx, :]
@@ -450,7 +459,7 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         new_base_values = shap_values.base_values
         shap_values_ = shap.Explanation(new_values, new_base_values, new_data, new_display_data,
                                         feature_names=shap_values.output_names)
-        shap.plots.beeswarm(shap_values_, order=class_order, plot_size=(14, 7), show=False, **kwargs)
+        shap.plots.beeswarm(shap_values_, order=class_order, show=False, plot_size=plot_size, **kwargs)
         plt.title(shap_values.feature_names[feature_idx])
         plt.show()
 
@@ -483,6 +492,21 @@ def plot_feature_effects(*shap_values, title=None, highlight=None, **kwargs):
                                        xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
                                        ax=ax, show=False, color='r', hist=False, **kwargs)
                 plot_idx += 1
+    plt.show()
+
+
+def plot_feature_effects_comparison(**kw_shap_values):
+    kw_shap_values = ensure_all_shap_values_are_3d(**kw_shap_values)
+    first_shap_values = next(iter(kw_shap_values.values()))
+    shape = first_shap_values.shape
+    nrows = shape[1] * shape[2]
+    ncols = len(kw_shap_values)
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='all', sharey='all', figsize=(9*ncols, 7*nrows))
+    it_axs = iter(axs.flat)
+    for feature in first_shap_values.feature_names:
+        for class_ in first_shap_values.output_names:
+            for title, shap_values in kw_shap_values.items():
+                shap.plots.scatter(shap_values[:, feature, class_], title=f'{title} {class_}', ax=next(it_axs), show=False)
     plt.show()
 
 

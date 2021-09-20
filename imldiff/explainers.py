@@ -495,7 +495,7 @@ def plot_feature_effects(*shap_values, title=None, highlight=None, **kwargs):
     plt.show()
 
 
-def plot_feature_effects_comparison(**kw_shap_values):
+def plot_feature_effects_comparison(color='#1E88E5', **kw_shap_values):
     kw_shap_values = ensure_all_shap_values_are_3d(**kw_shap_values)
     first_shap_values = next(iter(kw_shap_values.values()))
     shape = first_shap_values.shape
@@ -506,7 +506,8 @@ def plot_feature_effects_comparison(**kw_shap_values):
     for feature in first_shap_values.feature_names:
         for class_ in first_shap_values.output_names:
             for title, shap_values in kw_shap_values.items():
-                shap.plots.scatter(shap_values[:, feature, class_], title=f'{title} {class_}', ax=next(it_axs), show=False)
+                shap.plots.scatter(shap_values[:, feature, class_], title=f'{title} {class_}', ax=next(it_axs),
+                                   color=color, show=False)
     plt.show()
 
 

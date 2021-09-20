@@ -130,3 +130,4 @@ src/version.ts
 *.tree
 *.diro2c
 *.pickle
+*.comparer

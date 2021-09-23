@@ -115,4 +115,4 @@ def _get_decision_tree(explanation):
 def print_diro2c_rules(explanation):
     feature_names = _get_feature_names(explanation)
     dc_full = _get_decision_tree(explanation)
-    rule_extractor.print_rules_for_binary(dc_full, feature_names, explanation['class_names'], 'diff')
+    rule_extractor.print_rules_for_binary(dc_full, feature_names, explanation['class_names'], explanation['class_names'][1])

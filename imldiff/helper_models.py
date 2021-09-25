@@ -11,7 +11,9 @@ round_with_precision = lambda X, precision: precision * np.round((1/precision) *
 class ModifiedClassifier(BaseEstimator, ClassifierMixin):
 
     def  __init__(self, base_model):
+        check_is_fitted(base_model)
         self.base_model = base_model
+        self.classes_ = base_model.classes_
         self.predict = lambda X: self._postprocess_labels(
             self.base_model.predict(self._preprocess(X)), X)
 
@@ -22,10 +24,6 @@ class ModifiedClassifier(BaseEstimator, ClassifierMixin):
         if hasattr(self.base_model, 'predict_log_proba'):
             self.predict_log_proba = lambda X: self._postprocess_log_proba(
                 self.base_model.predict_log_proba(self._preprocess(X)), X)
-
-    @property
-    def classes_(self):
-        return self.base_model.classes_
 
     def fit(self, X, y):
         return self

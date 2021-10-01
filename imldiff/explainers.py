@@ -464,7 +464,7 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         plt.show()
 
 
-def plot_feature_effects(*shap_values, title=None, highlight=None, **kwargs):
+def plot_feature_effects(*shap_values, title=None, highlight=None, constrained_layout=False, **kwargs):
     """ Plot marginal effect of each feature vs. its SHAP values per class.
 
     Further keyword arguments are passed to shap.plots.scatter,
@@ -473,7 +473,8 @@ def plot_feature_effects(*shap_values, title=None, highlight=None, **kwargs):
     shap_values = ensure_all_shap_values_are_3d(*shap_values)
     ncols = sum([s.shape[2] for s in shap_values])
     nrows = shap_values[0].shape[1]
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='row', sharey='row', figsize=(9 * ncols, 7 * nrows))
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='row', sharey='row', figsize=(9 * ncols, 7 * nrows),
+                            constrained_layout=constrained_layout)
     fig.suptitle(title, fontsize='x-large', y=0.91)
     plot_idx = 0
     for feature_idx in range(nrows):

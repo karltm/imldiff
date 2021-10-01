@@ -1,0 +1,8 @@
+imblearn== 0.7.0
+joblib== 0.14.1
+matplotlib== 3.2.2
+numpyn== 1.16.0
+pandas== 1.1.5
+python== 3.6.10
+seaborn== 0.10.0
+scikit-learn== 0.24.1

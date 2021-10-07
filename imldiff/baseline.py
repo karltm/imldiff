@@ -12,6 +12,7 @@ def _remove_occurences(l, s):
 
 
 def get_rules(tree, feature_names, class_names, class_=None, feature_order=None):
+    """Adapted from: https://mljar.com/blog/extract-rules-decision-tree/"""
     tree_ = tree.tree_
     feature_name = [
         feature_names[i] if i != _tree.TREE_UNDEFINED else "undefined!"
@@ -63,6 +64,7 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None)
 
 
 def dt_feature_importance(model, normalize=True):
+    """Source: https://stackoverflow.com/questions/49170296/scikit-learn-feature-importance-calculation-in-decision-trees"""
 
     left_c = model.tree_.children_left
     right_c = model.tree_.children_right

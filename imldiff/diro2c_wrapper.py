@@ -1,10 +1,11 @@
 from typing import List
 
 import diro2c
+from comparers import ModelComparer
+from data_generation.global_data_generation import global_data_generator
 from data_generation.helper import prepare_df
 from data_generation.neighborhood_generation import neighbor_generator
 from enums.diff_classifier_method_type import diff_classifier_method_type
-from mlxtend.plotting import plot_decision_regions
 from sklearn.tree import plot_tree
 import rule_extractor
 import pandas as pd
@@ -13,16 +14,22 @@ from util import index_of
 import matplotlib.pyplot as plt
 
 
-class CombinationClassifier:
-    def __init__(self, comparer, label_explain_a, label_explain_b, factors=None):
-        self.comparer = comparer
-        self.label_explain_a = label_explain_a
-        self.label_explain_b = label_explain_b
+class PrescaleClassifier:
+    def __init__(self, clf, factors):
+        self.clf = clf
         self.factors = factors
 
     def predict(self, X):
-        if self.factors is not None:
-            X = X / self.factors
+        return self.clf.predict(X * self.factors)
+
+
+class CombinationClassifier:
+    def __init__(self, comparer, label_explain_a, label_explain_b):
+        self.comparer = comparer
+        self.label_explain_a = label_explain_a
+        self.label_explain_b = label_explain_b
+
+    def predict(self, X):
         return (self.comparer.clf_a.predict(X) == self.label_explain_a) & \
                (self.comparer.clf_b.predict(X) == self.label_explain_b)
 
@@ -32,8 +39,13 @@ class ConstantClassifier:
         return np.repeat(False, X.shape[0])
 
 
-def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class, scale_features: dict = None):
-    """Wrapper to generate diro2c explanation from one-vs-rest classification of the specified class"""
+def generate_diro2c_explanation(X, idx_explain, comparer: ModelComparer, focus_class=None, scale_features: dict = None,
+                                generation_func='local', gn_population_size=5000):
+    """Wrapper to generate diro2c explanations
+    scale_features : if specified, scale features with this array of factors prior to generating the explanation
+                     and scale back afterwards to tackle the issue with integer-only support of diro2c
+    focus_class : if specified, generate a binary diff clf explanation in a one-vs-rest style for this class
+    """
     if scale_features is not None:
         factors = np.repeat(1.0, X.shape[1])
         for feature, factor in scale_features.items():
@@ -43,9 +55,24 @@ def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class, scale
     else:
         factors = None
 
-    label_explain_a, label_explain_b = comparer.class_tuples[index_of(comparer.class_names, confusion_class)]
-    clf_a = CombinationClassifier(comparer, label_explain_a, label_explain_b, factors)
-    clf_b = ConstantClassifier()
+    if generation_func == 'local':
+        generation_func = neighbor_generator.get_modified_genetic_neighborhood
+    elif generation_func == 'global':
+        generation_func = global_data_generator.get_global_mod_genetic_neighborhood_dataset
+
+    if focus_class is not None:
+        label_explain_a, label_explain_b = comparer.class_tuples[index_of(comparer.class_names, focus_class)]
+        clf_a = CombinationClassifier(comparer, label_explain_a, label_explain_b)
+        clf_b = ConstantClassifier()
+        method = diff_classifier_method_type.binary_diff_classifier
+    else:
+        clf_a = comparer.clf_a
+        clf_b = comparer.clf_b
+        method = diff_classifier_method_type.multiclass_diff_classifier
+
+    if factors is not None:
+        clf_a = PrescaleClassifier(clf_a, 1/factors)
+        clf_b = PrescaleClassifier(clf_b, 1/factors)
 
     d = dict([(feature_name, feature_data)
               for feature_name, feature_data
@@ -54,15 +81,17 @@ def generate_diro2c_explanation(X, idx_explain, comparer, confusion_class, scale
     df = pd.DataFrame(d)
     dataset = prepare_df(df, 'test', 'y')
 
-    explanation = diro2c.recognize_diff(idx_explain, X, dataset, clf_a, clf_b,
-                                        diff_classifier_method_type.binary_diff_classifier,
-                                        data_generation_function=neighbor_generator.get_modified_genetic_neighborhood)
+    explanation = diro2c.recognize_diff(idx_explain, X, dataset, clf_a, clf_b, method, generation_func,
+                                        gn_population_size=gn_population_size)
 
     if factors is not None:
         X = explanation['binary_diff_classifer']['evaluation_info']['X'].astype(float) / factors
         explanation['binary_diff_classifer']['evaluation_info']['X'] = X
 
-    explanation['class_names'] = np.array(['not ' + confusion_class, confusion_class])
+    if focus_class is not None:
+        explanation['class_names'] = np.array(['not ' + focus_class, focus_class])
+    else:
+        explanation['class_names'] = comparer.class_names
 
     return explanation
 

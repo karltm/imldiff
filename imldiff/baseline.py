@@ -11,7 +11,7 @@ def _remove_occurences(l, s):
     return l
 
 
-def get_rules(tree, feature_names, class_names, class_=None, feature_order=None):
+def get_rules(tree, feature_names, class_names, class_=None, feature_order=None, precision=3):
     """Adapted from: https://mljar.com/blog/extract-rules-decision-tree/"""
     tree_ = tree.tree_
     feature_name = [
@@ -28,10 +28,10 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None)
             name = feature_name[node]
             threshold = tree_.threshold[node]
             p1 = _remove_occurences(path, f"({name} <=")
-            p1 += [f"({name} <= {np.round(threshold, 3)})"]
+            p1 += [f"({name} <= {np.round(threshold, precision)})"]
             recurse(tree_.children_left[node], p1, paths)
             p2 = _remove_occurences(path, f"({name} >")
-            p2 += [f"({name} > {np.round(threshold, 3)})"]
+            p2 += [f"({name} > {np.round(threshold, precision)})"]
             recurse(tree_.children_right[node], p2, paths)
         else:
             if feature_order is not None:
@@ -40,6 +40,11 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None)
             paths += [path]
 
     recurse(0, path, paths)
+
+    # sort by samples count
+    samples_count = [p[-1][1] for p in paths]
+    ii = list(np.argsort(samples_count))
+    paths = [paths[i] for i in reversed(ii)]
 
     rules = []
     for path in paths:

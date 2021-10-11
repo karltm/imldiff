@@ -101,7 +101,7 @@ def _generate_random_data(X, class_name, columns, discrete, continuous, features
         X1.append(new_values)
 
     if only_random:
-        X1 = np.vstack((X1[0], X1[1])).T
+        X1 = np.array(X1).T
     else:
         X1 = np.concatenate((X, np.column_stack(X1)), axis=0).tolist()
         X1 = np.unique(X1, axis=0)

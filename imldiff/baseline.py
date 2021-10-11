@@ -36,7 +36,7 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None,
         else:
             if feature_order is not None:
                 path = sorted(path, key=lambda x: np.argwhere(feature_names[feature_order] == x.split('(')[1].split(' ')[0])[0][0] + (0.5 if '<=' in x else 0))
-            path += [(tree_.value[node], tree_.n_node_samples[node])]
+            path += [(tree_.value[node], tree_.n_node_samples[node], node)]
             paths += [path]
 
     recurse(0, path, paths)
@@ -48,10 +48,10 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None,
 
     rules = []
     for path in paths:
-        rule = "if "
+        rule = f"node #{path[-1][2]}: if "
 
         for p in path[:-1]:
-            if rule != "if ":
+            if not rule.endswith(': if '):
                 rule += " and "
             rule += str(p)
         rule += " then "
@@ -62,8 +62,7 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None,
             l = np.argmax(classes)
             if class_ is not None and class_ != class_names[l]:
                 continue
-            rule += f"class: {class_names[l]} (proba: {np.round(100.0*classes[l]/np.sum(classes),2)}%)"
-        rule += f" | based on {path[-1][1]:,} samples"
+            rule += f"class: {class_names[l]} ({int(classes[l])}/{int(sum(classes))} instances)"
         rules += [rule]
     return rules
 

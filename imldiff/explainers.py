@@ -464,35 +464,38 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         plt.show()
 
 
-def plot_feature_effects(*shap_values, title=None, highlight=None, constrained_layout=False, **kwargs):
-    """ Plot marginal effect of each feature vs. its SHAP values per class.
+def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None, highlight=None, alpha=None, show=True, ax=None):
+    if isinstance(feature, int):
+        feature = shap_values.feature_names[feature]
+    if highlight is not None:
+        h = np.repeat('b', len(highlight))
+        h[np.array(highlight) == True] = 'r'
+        highlight = h
+    s = shap_values[:, feature]
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+    ax.scatter(s.data, s.values, c=highlight, alpha=alpha)
+    ax.set_title(title)
+    ax.set_xlabel(feature)
+    ax.set_ylabel('SHAP value of ' + feature)
+    if show:
+        plt.show()
 
-    Further keyword arguments are passed to shap.plots.scatter,
-    and may include e.g. color=is_pred_diff, alpha=0.2
-    """
-    shap_values = ensure_all_shap_values_are_3d(*shap_values)
-    ncols = sum([s.shape[2] for s in shap_values])
-    nrows = shap_values[0].shape[1]
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='row', sharey='row', figsize=(9 * ncols, 7 * nrows),
-                            constrained_layout=constrained_layout)
-    fig.suptitle(title, fontsize='x-large', y=0.91)
-    plot_idx = 0
-    for feature_idx in range(nrows):
-        xmin = np.min([s.data[:, feature_idx].min(0) for s in shap_values])
-        xmax = np.max([s.data[:, feature_idx].max(0) for s in shap_values])
-        ymin = np.min([s.values[:, feature_idx, :].flatten().min(0) for s in shap_values])
-        ymax = np.max([s.values[:, feature_idx, :].flatten().max(0) for s in shap_values])
-        for s in shap_values:
-            for class_idx in range(s.shape[2]):
-                ax = axs if ncols == 1 and nrows == 1 else axs.flat[plot_idx]
-                shap.plots.scatter(s[:, feature_idx, class_idx], title=s.output_names[class_idx],
-                                   xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
-                                   ax=ax, show=False, **kwargs)
-                if highlight is not None and np.sum(highlight) > 0:
-                    shap.plots.scatter(s[highlight, feature_idx, class_idx], title=s.output_names[class_idx],
-                                       xmin=xmin, xmax=xmax, ymin=ymin, ymax=ymax,
-                                       ax=ax, show=False, color='r', hist=False, **kwargs)
-                plot_idx += 1
+
+def plot_feature_effects_per_feature(shap_values, feature, highlight=None, alpha=None, show=True):
+    ncols = len(shap_values.output_names)
+    _, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
+    for class_name, ax in zip(shap_values.output_names, axs.flat):
+        plot_feature_effects_per_class_per_feature(shap_values[:, :, class_name], feature,
+                                                   title=class_name, highlight=highlight, alpha=alpha, show=False, ax=ax)
+    if show:
+        plt.show()
+
+
+def plot_feature_effects(shap_values, highlight=None, alpha=None):
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    for feature in shap_values.feature_names:
+        plot_feature_effects_per_feature(shap_values, feature, highlight=highlight, alpha=alpha, show=False)
     plt.show()
 
 

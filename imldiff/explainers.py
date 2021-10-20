@@ -465,7 +465,7 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
 
 
 def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None, highlight=None, alpha=None, show=True, ax=None):
-    if isinstance(feature, int):
+    if isinstance(feature, (int, np.integer)):
         feature = shap_values.feature_names[feature]
     if highlight is not None:
         h = np.repeat('b', len(highlight))

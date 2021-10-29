@@ -9,7 +9,7 @@ def make_task3(folder='..'):
     feature_names = X.columns.to_numpy()
     clf_a = joblib.load(f'{folder}/model_A.joblib')
     clf_b = joblib.load(f'{folder}/model_B.joblib')
-    return clf_a, clf_b, X, y, feature_names
+    return clf_a, clf_b, X.to_numpy(), y.to_numpy(), feature_names
 
 
 def make_task4(folder='..'):
@@ -19,4 +19,4 @@ def make_task4(folder='..'):
     feature_names = X.columns.to_numpy()
     clf_a = joblib.load(f'{folder}/model_A.joblib')
     clf_b = joblib.load(f'{folder}/model_C.joblib')
-    return clf_a, clf_b, X, y, feature_names
+    return clf_a, clf_b, X.to_numpy(), y.to_numpy(), feature_names

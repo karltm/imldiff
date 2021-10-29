@@ -11,6 +11,12 @@ def _remove_occurences(l, s):
     return l
 
 
+def print_rules(tree, feature_names, class_names, class_=None, feature_order=None, precision=3):
+    rules = get_rules(tree, feature_names, class_names, class_, feature_order, precision)
+    for rule in rules:
+        print(rule)
+
+
 def get_rules(tree, feature_names, class_names, class_=None, feature_order=None, precision=3):
     """Adapted from: https://mljar.com/blog/extract-rules-decision-tree/"""
     tree_ = tree.tree_

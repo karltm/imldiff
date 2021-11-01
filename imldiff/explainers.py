@@ -1,3 +1,4 @@
+from itertools import repeat
 from typing import Iterable
 import shap
 from shap.maskers import Independent
@@ -464,17 +465,19 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         plt.show()
 
 
-def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None, highlight=None, alpha=None, show=True, ax=None):
+def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None, color=None, fill=None, alpha=None,
+                                               show=True, ax=None, jitter=False):
     if isinstance(feature, (int, np.integer)):
         feature = shap_values.feature_names[feature]
-    if highlight is not None:
-        h = np.repeat('b', len(highlight))
-        h[np.array(highlight) == True] = 'r'
-        highlight = h
+    if color is None:
+        color = repeat(True, len(shap_values))
+    if fill is None:
+        fill = repeat(True, len(shap_values))
+    c = [('xkcd:pale pink' if c else 'xkcd:light blue') if not f else 'xkcd:red' if c else 'xkcd:blue' for c, f in zip(color, fill)]
     s = shap_values[:, feature]
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
-    ax.scatter(s.data, s.values, c=highlight, alpha=alpha)
+    _scatter(s.data, s.values, ax=ax, jitter=jitter, c=c, alpha=alpha)
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)
@@ -482,20 +485,39 @@ def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None,
         plt.show()
 
 
-def plot_feature_effects_per_feature(shap_values, feature, highlight=None, alpha=None, show=True):
+def _rand_jitter(arr):
+    stdev = .01 * (max(arr) - min(arr))
+    return arr + np.random.randn(len(arr)) * stdev
+
+
+def _scatter(x, y, ax=None, jitter=False, s=20, c='b', marker='o', cmap=None, norm=None, vmin=None, vmax=None, alpha=None, linewidths=None, verts=None, hold=None, **kwargs):
+    """source: https://stackoverflow.com/questions/8671808/matplotlib-avoiding-overlapping-datapoints-in-a-scatter-dot-beeswarm-plot"""
+    if ax is not None:
+        func = ax.scatter
+    else:
+        func = plt.scatter
+    if jitter:
+        x = _rand_jitter(x)
+        y = _rand_jitter(y)
+    return func(x, y, s=s, c=c, marker=marker, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, alpha=alpha, linewidths=linewidths, **kwargs)
+
+
+def plot_feature_effects_per_feature(shap_values, feature, color=None, fill=None, alpha=None, show=True, jitter=False):
     ncols = len(shap_values.output_names)
     _, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
     for class_name, ax in zip(shap_values.output_names, axs.flat):
         plot_feature_effects_per_class_per_feature(shap_values[:, :, class_name], feature,
-                                                   title=class_name, highlight=highlight, alpha=alpha, show=False, ax=ax)
+                                                   title=class_name, color=color, fill=fill, alpha=alpha, show=False,
+                                                   ax=ax, jitter=jitter)
     if show:
         plt.show()
 
 
-def plot_feature_effects(shap_values, highlight=None, alpha=None):
+def plot_feature_effects(shap_values, color=None, fill=None, alpha=None, jitter=False):
     shap_values = ensure_shap_values_are_3d(shap_values)
     for feature in shap_values.feature_names:
-        plot_feature_effects_per_feature(shap_values, feature, highlight=highlight, alpha=alpha, show=False)
+        plot_feature_effects_per_feature(shap_values, feature, color=color, fill=fill, alpha=alpha, show=False,
+                                         jitter=jitter)
     plt.show()
 
 

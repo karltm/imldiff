@@ -1,6 +1,4 @@
-import pandas as pd
 import numpy as np
-import scipy as sp
 from helper_models import RuleClassifier
 
 
@@ -10,23 +8,21 @@ def decision_rule(X):
 
 def modified_decision_rule(X):
     y = decision_rule(X).astype(bool)
-    y ^= (-70 < X[:, 0]) & (X[:, 0] <= -60) & (10 < X[:, 1] ) & (X[:, 1] <= 20)    # modification 1
-    y ^= (-70 < X[:, 0]) & (X[:, 0] <= -60) & (-20 < X[:, 1] ) & (X[:, 1] <= -10)  # modification 2
 
-    y ^= (-10 < X[:, 0]) & (X[:, 0] <= 0) & (-10 < X[:, 1] ) & (X[:, 1] <= 0)      # modification 3
-    y ^= (-20 < X[:, 0]) & (X[:, 0] <= -10) & (-20 < X[:, 1] ) & (X[:, 1] <= -10)  # modification 4
-    y ^= (-10 < X[:, 0]) & (X[:, 0] <= 0) & (-30 < X[:, 1] ) & (X[:, 1] <= -20)    # modification 5
+    mod1 = (-10 < X[:, 0]) & (X[:, 0] <= 0) & (-20 < X[:, 1] ) & (X[:, 1] <= 10)
+    mod2 = (-20 < X[:, 0]) & (X[:, 0] <= -10) & (-10 < X[:, 1] ) & (X[:, 1] <= 0)
+    mod3 = (-60 < X[:, 0]) & (X[:, 0] <= -50) & (0 < X[:, 1] ) & (X[:, 1] <= 10)
+    mod4 = (0 < X[:, 0]) & (X[:, 0] <= 10) & (0 < X[:, 1] ) & (X[:, 1] <= 10)
 
-    y ^= (0 < X[:, 0]) & (X[:, 0] <= 10) & (20 < X[:, 1] ) & (X[:, 1] <= 30)       # modification 6
-    y ^= (10 < X[:, 0]) & (X[:, 0] <= 20) & (10 < X[:, 1] ) & (X[:, 1] <= 20)      # modification 7
-    y ^= (0 < X[:, 0]) & (X[:, 0] <= 10) & (0 < X[:, 1] ) & (X[:, 1] <= 10)        # modification 8
+    y ^= (mod1 | mod2 | mod3 | mod4)
+
     return y.astype(int)
 
 
 def make_task():
-    x1_min, x1_max = -100.0, 100.0
-    x2_min, x2_max = -100.0, 100.0
-    mesh_step_size = 2.0
+    x1_min, x1_max = -80.0, 80.0
+    x2_min, x2_max = -80.0, 80.0
+    mesh_step_size = 5.0
     xx, yy = np.meshgrid(np.arange(x1_min, x1_max, mesh_step_size), np.arange(x2_min, x2_max, mesh_step_size))
     X = np.c_[xx.ravel(), yy.ravel()]
 

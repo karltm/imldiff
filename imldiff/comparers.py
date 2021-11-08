@@ -172,7 +172,8 @@ class ModelComparer:
                                            fig=fig, ax=ax, **kwargs)
         fig.suptitle('Base classification task with decision boundaries of the classifiers', fontsize='x-large')
         
-    def plot_decision_boundaries(self, X, X_display=None, kind='label', separate=False, idx_x=0, idx_y=1, **kwargs):
+    def plot_decision_boundaries(self, X, X_display=None, kind='label', separate=False, idx_x=0, idx_y=1,
+                                 xlim=None, ylim=None, **kwargs):
         if kind == 'label':
             binary_label_diff = self.predict_bin_diff(X)
             label_diff = self.predict_mclass_diff(X)
@@ -197,7 +198,7 @@ class ModelComparer:
                                        predict=self.predict_bin_diff,
                                        class_names=self.bin_diff_clf.classes_,
                                        fig=fig, ax=axs[0],
-                                       idx_x=idx_x, idx_y=idx_y, **kwargs)
+                                       idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, **kwargs)
                 plot_decision_boundary(X[mask],
                                        label_diff[mask],
                                        'Difference classes for predicted labels',
@@ -206,7 +207,7 @@ class ModelComparer:
                                        predict=self.predict_mclass_diff,
                                        class_names=self.class_names,
                                        fig=fig, ax=axs[1],
-                                       idx_x=idx_x, idx_y=idx_y, **kwargs)
+                                       idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, **kwargs)
         else:
             if kind == 'proba':
                 predict_binary = self.predict_bin_diff_proba
@@ -224,7 +225,7 @@ class ModelComparer:
             fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
             fig.suptitle('Binary difference classifier and its decision boundary', fontsize='x-large')
             plot_decision_boundary(X, binary_diff_predictions, 'Labels different', self.feature_names,
-                                   predict=predict_binary, zlim=zlim, fig=fig, ax=ax, **kwargs)
+                                   predict=predict_binary, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim, **kwargs)
             
             nclasses = len(self.mclass_diff_clf.base_classes_)
             fig, axs = plt.subplots(nrows=nclasses, ncols=nclasses, sharex=True, sharey=True,
@@ -234,7 +235,7 @@ class ModelComparer:
                 class_name = str(self.mclass_diff_clf.class_tuples_[class_idx])
                 predict = lambda X: predict_multiclass(X)[:, class_idx]
                 plot_decision_boundary(X, diff_predictions[:, class_idx], class_name, self.feature_names,
-                                       predict=predict, zlim=zlim, fig=fig, ax=ax, **kwargs)
+                                       predict=predict, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim, **kwargs)
                 
     def plot_confusion_matrix(self, X):
         pred_a = self.clf_a.predict(X)
@@ -272,7 +273,7 @@ plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
                            idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
-                           fig=None, ax=None, **kwargs):
+                           fig=None, ax=None, xlim=None, ylim=None, **kwargs):
     """
     - X: instances to plot
     - z: color of instances
@@ -304,9 +305,11 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
 
     draw_contours = predict is not None and X.shape[1] == 2
     if draw_contours:
-        x_min, x_max = X[:, idx_x].min() - .5, X[:, idx_x].max() + .5
-        y_min, y_max = X[:, idx_y].min() - .5, X[:, idx_y].max() + .5
-        xx, yy = np.meshgrid(np.arange(x_min, x_max, mesh_step_size), np.arange(y_min, y_max, mesh_step_size))
+        if xlim is None:
+            xlim = X[:, idx_x].min() - .5, X[:, idx_x].max() + .5
+        if ylim is None:
+            ylim = X[:, idx_y].min() - .5, X[:, idx_y].max() + .5
+        xx, yy = np.meshgrid(np.arange(xlim[0], xlim[1], mesh_step_size), np.arange(ylim[0], ylim[1], mesh_step_size))
         z_pred = predict(np.c_[xx.ravel(), yy.ravel()])
         z_pred = z_pred.reshape(xx.shape)
 

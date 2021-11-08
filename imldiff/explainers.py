@@ -473,11 +473,25 @@ def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None,
         color = repeat(True, len(shap_values))
     if fill is None:
         fill = repeat(True, len(shap_values))
-    c = [('xkcd:pale pink' if c else 'xkcd:light blue') if not f else 'xkcd:red' if c else 'xkcd:blue' for c, f in zip(color, fill)]
     s = shap_values[:, feature]
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
-    _scatter(s.data, s.values, ax=ax, jitter=jitter, c=c, alpha=alpha)
+    for fill_value in np.unique(fill):
+        fill_mask = fill == fill_value
+        for color_value in np.unique(color):
+            color_mask = color == color_value
+            if fill_value:
+                if color_value:
+                    c = 'xkcd:red'
+                else:
+                    c = 'xkcd:blue'
+            else:
+                if color_value:
+                    c = 'xkcd:pale pink'
+                else:
+                    c = 'xkcd:light blue'
+            s_plot = s[fill_mask & color_mask]
+            _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=c, alpha=alpha)
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)

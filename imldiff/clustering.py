@@ -8,7 +8,7 @@ from explainers import plot_feature_effects_per_feature, ensure_are_shap_values
 
 class ClusterNode:
     def __init__(self, comparer, shap_values, node, parent, diff_class=None, cluster_classes=None,
-                 categorical_features=[]):
+                 categorical_features=None):
         self.comparer = comparer
         self.root_shap_values = shap_values
         self.node = node
@@ -16,7 +16,10 @@ class ClusterNode:
         self.diff_class = diff_class
         self.cluster_classes = cluster_classes
         self.shap_values = self.root_shap_values[self.node.pre_order()]
-        self.categorical_features = categorical_features
+        if categorical_features is not None:
+            self.categorical_features = categorical_features
+        else:
+            self.categorical_features = []
         self._set_classes()
         print(self)
         print(self.class_counts)

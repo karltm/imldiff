@@ -8,6 +8,8 @@ def make_task():
     """
     Based on https://gitlab.com/andsta/diro2c/-/blob/develop/show_decision_boundaries_gaussians.py
     Originally published as https://doi.org/10.5281/zenodo.5362220
+    Modification: added `probability=True` parameter to SVC instantiation, to enable
+                  `predict_proba` and `predict_log_proba` functions of the classifiers
     """
     X1, y1 = make_gaussian_quantiles(n_samples=300,
                                      n_classes=2, shuffle=False, cov=0.8, random_state=7)

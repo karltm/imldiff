@@ -118,8 +118,7 @@ class ModelComparer:
         return lambda X: _calc_log_odds_from_log_proba(self.mclass_diff_clf.predict_log_proba(X))
 
     def plot_individual_clf_decision_boundaries(self, X, X_display=None, y_true=None, separate=False,
-                                                kind='label', idx_x=0, idx_y=1, **kwargs):
-        zlim = None
+                                                kind='label', idx_x=0, idx_y=1, zlim=None, **kwargs):
         class_names = None
         if kind == 'label':
             class_names = self.mclass_diff_clf.base_classes_
@@ -147,10 +146,12 @@ class ModelComparer:
         else:
             if kind == 'proba':
                 predict_functions = self.predict_proba_functions
-                zlim = (0, 1)
+                if zlim is None:
+                    zlim = (0, 1)
             elif kind == 'log-odds':
                 predict_functions = self.predict_log_odds_functions
-                zlim = (-4, 4)
+                if zlim is None:
+                    zlim = (-4, 4)
                 y_true[y_true == self.mclass_diff_clf.base_classes_[0]] = zlim[0]
                 y_true[y_true == self.mclass_diff_clf.base_classes_[1]] = zlim[1]
             else:
@@ -173,7 +174,7 @@ class ModelComparer:
         fig.suptitle('Base classification task with decision boundaries of the classifiers', fontsize='x-large')
         
     def plot_decision_boundaries(self, X, X_display=None, kind='label', separate=False, idx_x=0, idx_y=1,
-                                 xlim=None, ylim=None, **kwargs):
+                                 xlim=None, ylim=None, zlim=None, **kwargs):
         if kind == 'label':
             binary_label_diff = self.predict_bin_diff(X)
             label_diff = self.predict_mclass_diff(X)
@@ -198,7 +199,7 @@ class ModelComparer:
                                        predict=self.predict_bin_diff,
                                        class_names=self.bin_diff_clf.classes_,
                                        fig=fig, ax=axs[0],
-                                       idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, **kwargs)
+                                       idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, zlim=zlim, **kwargs)
                 plot_decision_boundary(X[mask],
                                        label_diff[mask],
                                        'Difference classes for predicted labels',
@@ -207,16 +208,18 @@ class ModelComparer:
                                        predict=self.predict_mclass_diff,
                                        class_names=self.class_names,
                                        fig=fig, ax=axs[1],
-                                       idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, **kwargs)
+                                       idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, zlim=zlim, **kwargs)
         else:
             if kind == 'proba':
                 predict_binary = self.predict_bin_diff_proba
                 predict_multiclass = self.predict_mclass_diff_proba
-                zlim = 0, 1
+                if zlim is None:
+                    zlim = 0, 1
             elif kind == 'log-odds':
                 predict_binary = self.predict_bin_diff_log_odds
                 predict_multiclass = self.predict_mclass_diff_log_odds
-                zlim = -4, 4
+                if zlim is None:
+                    zlim = -4, 4
             else:
                 raise Exception(f'unsupported kind: {kind}')
             binary_diff_predictions = predict_binary(X)

@@ -337,3 +337,8 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         ax.set_xlabel(feature_names[idx_x])
         ax.set_ylabel(feature_names[idx_y])
     ax.set_title(title)
+
+    if xlim is not None:
+        ax.set_xlim(xlim)
+    if ylim is not None:
+        ax.set_ylim(ylim)

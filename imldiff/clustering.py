@@ -78,15 +78,24 @@ class ClusterNode:
         else:
             return self.is_different
 
-    def plot_feature(self, feature, classes=None, alpha=None, focus=None):
+    def plot_feature(self, feature, classes=None, alpha=None, focus=None, color=None):
         fill = None
         if classes is None:
             classes = self.cluster_classes
         if focus is not None:
             fill = np.in1d(self.node.pre_order(), focus.node.pre_order())
+        if color is None:
+            color = self.highlight
+        color_feature = None
+        if isinstance(color, int):
+            color_feature = self.shap_values.feature_names[color]
+        if isinstance(color, str):
+            color_feature = color
+        if color_feature is not None:
+            color = self.shap_values[:, color_feature].data
         jitter = self.shap_values[:, feature].feature_names in self.categorical_features
         s = ensure_are_shap_values(self.shap_values)[:, :, classes]
-        plot_feature_effects_per_feature(s, feature, color=self.highlight, fill=fill, alpha=alpha, jitter=jitter)
+        plot_feature_effects_per_feature(s, feature, color=color, color_label=color_feature, fill=fill, alpha=alpha, jitter=jitter)
 
     def test(self, **kwargs):
         X_test = pd.DataFrame(self.shap_values.data.copy(), columns=self.shap_values.feature_names)

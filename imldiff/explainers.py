@@ -1,4 +1,3 @@
-from itertools import repeat
 from typing import Iterable
 import shap
 from shap.maskers import Independent
@@ -12,6 +11,7 @@ import warnings
 from types import SimpleNamespace
 from comparers import ModelComparer
 from IPython.display import display
+from shap.utils import approximate_interactions
 
 
 def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display: np.ndarray = None,
@@ -131,6 +131,7 @@ def _make_shap_explainer(predict, masker, algorithm, feature_names, output_names
     # workaround: not all shap explainers support output_names. so we remember them for later to recover them
     if output_names is not None and explainer.output_names is None:
         explainer.output_names_backup = output_names
+
     return explainer
 
 
@@ -469,34 +470,59 @@ def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None,
                                                show=True, ax=None, jitter=False):
     if isinstance(feature, (int, np.integer)):
         feature = shap_values.feature_names[feature]
-    if color is None:
-        color = repeat(True, len(shap_values))
-    if fill is None:
-        fill = repeat(True, len(shap_values))
     s = shap_values[:, feature]
     if ax is None:
         _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
-    for fill_value in np.unique(fill):
-        fill_mask = fill == fill_value
-        for color_value in np.unique(color):
-            color_mask = color == color_value
-            if fill_value:
-                if color_value:
-                    c = 'xkcd:red'
-                else:
-                    c = 'xkcd:blue'
-            else:
-                if color_value:
-                    c = 'xkcd:pale pink'
-                else:
-                    c = 'xkcd:light blue'
-            s_plot = s[fill_mask & color_mask]
-            _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=c, alpha=alpha)
+    draw_steps, plot_colors, cmaps = _make_plot_colors(len(shap_values), fill, color)
+    sc = None
+    for draw_step in np.unique(draw_steps):
+        cmap = None if cmaps is None else cmaps[draw_step]
+        mask = draw_steps == draw_step
+        s_plot = s[mask]
+        current_plot_colors = plot_colors[mask]
+        sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha)
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)
     if show:
         plt.show()
+    return sc
+
+
+def _make_plot_colors(n_values, fill=None, color=None):
+    if color is None:
+        color = np.repeat(True, n_values)
+    if fill is None:
+        fill = np.repeat(True, n_values)
+    if color.dtype == bool:
+        return _make_binary_plot_colors(n_values, fill, color)
+    elif color.dtype == float:
+        return _make_continuous_plot_colors(n_values, fill, color)
+    else:
+        raise Exception('color only supports a bool or number array')
+
+
+def _make_binary_plot_colors(n_values, fill=None, color=None):
+    draw_steps = np.repeat(0, n_values)
+    draw_steps[~fill & color] = 1
+    draw_steps[fill & ~color] = 2
+    draw_steps[fill & color] = 3
+
+    plot_colors = np.repeat('xkcd:light blue', n_values)
+    plot_colors[draw_steps == 1] = 'xkcd:pale pink'
+    plot_colors[draw_steps == 2] = 'xkcd:blue'
+    plot_colors[draw_steps == 3] = 'xkcd:red'
+
+    return draw_steps, plot_colors, None
+
+
+def _make_continuous_plot_colors(n_values, fill=None, color=None):
+    draw_steps = np.repeat(0, n_values)
+    if fill is not None and np.sum(fill) > 0:
+        draw_steps[fill] = 1
+    plot_colors = color
+    cmaps = ['coolwarm', 'RdYlBu_r']
+    return draw_steps, plot_colors, cmaps
 
 
 def _rand_jitter(arr):
@@ -516,14 +542,17 @@ def _scatter(x, y, ax=None, jitter=False, s=20, c='b', marker='o', cmap=None, no
     return func(x, y, s=s, c=c, marker=marker, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, alpha=alpha, linewidths=linewidths, **kwargs)
 
 
-def plot_feature_effects_per_feature(shap_values, feature, color=None, fill=None, alpha=None, show=True, jitter=False):
+def plot_feature_effects_per_feature(shap_values, feature, color=None, color_label=None, fill=None, alpha=None, show=True, jitter=False):
     ncols = len(shap_values.output_names)
-    _, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
+    fig, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
+    sc = None
     for class_name, ax in zip(shap_values.output_names, axs.flat):
-        plot_feature_effects_per_class_per_feature(shap_values[:, :, class_name], feature,
-                                                   title=class_name, color=color, fill=fill, alpha=alpha, show=False,
-                                                   ax=ax, jitter=jitter)
+        sc = plot_feature_effects_per_class_per_feature(shap_values[:, :, class_name], feature,
+                                                        title=class_name, color=color, fill=fill, alpha=alpha, show=False,
+                                                        ax=ax, jitter=jitter)
     if show:
+        if color_label is not None and sc is not None:
+            fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
         plt.show()
 
 
@@ -664,3 +693,13 @@ def plot_feature_influence_comparison(shap_values, instances_mask, feature_order
     for feature_name, cv, ncv in zip(shap_values.feature_names, confused_values, not_confused_values):
         df = pd.DataFrame([cv, ncv], columns=shap_values.output_names, index=['confused', 'not confused'])
         df.plot.bar(title=feature_name, ylabel='mean(SHAP value)')
+
+
+def estimate_feature_interaction_order(shap_values, feature):
+    if len(shap_values.shape) > 2:
+        raise Exception('only one target class supported')
+    feature_names = np.array(shap_values.feature_names)
+    if isinstance(feature, str):
+        feature = np.where(feature_names == feature)[0][0]
+    return approximate_interactions(feature, shap_values.values, shap_values.data)
+

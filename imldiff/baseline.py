@@ -11,14 +11,14 @@ def _remove_occurences(l, s):
     return l
 
 
-def print_rules(tree, feature_names, class_names, class_=None, feature_order=None, precision=3):
-    rules = get_rules(tree, feature_names, class_names, class_, feature_order, precision)
-    for rule in rules:
-        print(rule)
-
-
-def get_rules(tree, feature_names, class_names, class_=None, feature_order=None, precision=3):
+def print_rules(tree, feature_names, class_names, focus_class=None, feature_order=None, precision=0, X_test=None):
     """Adapted from: https://mljar.com/blog/extract-rules-decision-tree/"""
+
+    if feature_order is None:
+        feature_order = np.arange(len(feature_names))
+
+    focus_class_idx = np.where(class_names == focus_class)[0][0]
+
     tree_ = tree.tree_
     feature_name = [
         feature_names[i] if i != _tree.TREE_UNDEFINED else "undefined!"
@@ -34,14 +34,13 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None,
             name = feature_name[node]
             threshold = tree_.threshold[node]
             p1 = _remove_occurences(path, f"({name} <=")
-            p1 += [f"({name} <= {np.round(threshold, precision)})"]
+            p1 += [f"({name} <= {round_down(threshold, precision)})"]
             recurse(tree_.children_left[node], p1, paths)
             p2 = _remove_occurences(path, f"({name} >")
-            p2 += [f"({name} > {np.round(threshold, precision)})"]
+            p2 += [f"({name} > {round_down(threshold, precision)})"]
             recurse(tree_.children_right[node], p2, paths)
         else:
-            if feature_order is not None:
-                path = sorted(path, key=lambda x: np.argwhere(feature_names[feature_order] == x.split('(')[1].split(' ')[0])[0][0] + (0.5 if '<=' in x else 0))
+            path = sorted(path, key=lambda x: np.argwhere(feature_names[feature_order] == x.split('(')[1].split(' ')[0])[0][0] + (0.5 if '<=' in x else 0))
             path += [(tree_.value[node], tree_.n_node_samples[node], node)]
             paths += [path]
 
@@ -52,9 +51,13 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None,
     ii = list(np.argsort(samples_count))
     paths = [paths[i] for i in reversed(ii)]
 
+    n_instances_covered = 0
+    n_instances_total = 0
     rules = []
+    node_ids = []
     for path in paths:
-        rule = f"node #{path[-1][2]}: if "
+        node_id = path[-1][2]
+        rule = f"node #{node_id}: if "
 
         for p in path[:-1]:
             if not rule.endswith(': if '):
@@ -65,9 +68,31 @@ def get_rules(tree, feature_names, class_names, class_=None, feature_order=None,
             rule += "response: "+str(np.round(path[-1][0][0][0],3))
         else:
             classes = path[-1][0][0]
-            l = np.argmax(classes)
-            if class_ is not None and class_ != class_names[l]:
+            current_class_idx = np.argmax(classes)
+            n_instances_total += classes[focus_class_idx]
+            if focus_class is not None and focus_class != class_names[current_class_idx]:
                 continue
-            rule += f"class: {class_names[l]} ({int(classes[l])}/{int(sum(classes))} instances)"
+            share = round(classes[current_class_idx]/sum(classes), 3)
+            n_instances = int(classes.sum())
+            rule += f"class {class_names[current_class_idx]} (covers {share} of {n_instances} instances)"
+            n_instances_covered += classes[current_class_idx]
+        node_ids.append(node_id)
         rules += [rule]
-    return rules
+
+    for rule in rules:
+        print(rule)
+
+    if focus_class is not None:
+        print(f'coverage (train set): {n_instances_covered / n_instances_total}')
+
+    if X_test is not None:
+        y_pred = tree.predict(X_test)
+        focus_indices = np.where(y_pred)[0]
+        focus_nodes = tree.apply(X_test[focus_indices])
+        n_focus_nodes_present = np.in1d(focus_nodes, node_ids).sum()
+        print(f'coverage (test set): {n_focus_nodes_present/len(focus_indices)}')
+
+
+def round_down(value, decimals):
+    factor = 10 ** decimals
+    return np.floor(value * factor) / factor

@@ -79,4 +79,4 @@ SHAP values explain specific instances, but can be aggregated or their entire di
 
 This approach is based on SHAP values, proposed in S. M. Lundberg and S.-I. Lee. A unified approach to interpreting model predictions. In _Advances in Neural Information Processing Systems_, pages 4765–4774, 2017
 
-The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c), released under the GNU General Public License v3.0. For this reason, a copy has been obtained on 18th June 2021 from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c).
+The proposed approach is compared to [diro2c](https://gitlab.com/andsta/diro2c), released under the GNU General Public License v3.0. For this reason, a copy has been obtained on 18th June 2021 from this [revision](https://gitlab.com/andsta/diro2c/-/commit/176095eba8740cac81cfbb9a545300018c8af82c). Only a minor issue has been fixed, that prevented correct evaluation of the generated dataset with float type features. 

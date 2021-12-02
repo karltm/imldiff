@@ -276,7 +276,7 @@ plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
                            idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
-                           fig=None, ax=None, xlim=None, ylim=None, **kwargs):
+                           fig=None, ax=None, xlim=None, ylim=None, predict_value_names=None, **kwargs):
     """
     - X: instances to plot
     - z: color of instances
@@ -306,6 +306,9 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
     if z is None:
         z = predict(X)
 
+    if predict_value_names is None:
+        predict_value_names = class_names
+
     draw_contours = predict is not None and X.shape[1] == 2
     if draw_contours:
         if xlim is None:
@@ -317,15 +320,21 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         z_pred = z_pred.reshape(xx.shape)
 
     if class_names is not None:
+        legend1 = None
         if draw_contours:
-            levels = np.arange(len(class_names) + 1)
+            levels = np.arange(len(predict_value_names) + 1)
             cs = ax.contourf(xx, yy, z_pred + 0.5, levels, colors=plt_colors, alpha=.8)
+            proxy = [plt.Rectangle((0,0),1,1,fc = pc.get_facecolor()[0])
+                     for pc in cs.collections]
+            legend1 = ax.legend(proxy, predict_value_names, loc='upper left')
         for class_idx, class_ in enumerate(class_names):
             X_ = X_display[z == class_idx, :]
             if X_.shape[0] == 0:
                 continue
             ax.scatter(X_[:, idx_x], X_[:, idx_y], color=plt_colors[class_idx], edgecolors='k', label=str(class_), **kwargs)
         ax.legend()
+        if legend1 is not None:
+            plt.gca().add_artist(legend1)
     else:
         if draw_contours:
             levels = np.linspace(zlim[0], zlim[1], 21)

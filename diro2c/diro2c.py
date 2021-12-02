@@ -105,8 +105,8 @@ def recognize_diff(idx_instance_to_rec_diff, X_to_recognize_diff, dataset, black
                     dc_name = 'split_diff_classifier_10'
                     compare_function = dict_compare_functions['compare_10']
 
-            X = dataset['X'].astype(np.int64)
-            y = dataset['y'].astype(np.int64)
+            X = dataset['X']
+            y = dataset['y']
 
             #print(np.unique(y, return_counts=True))
 

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from comparers import ModelComparer
 from IPython.display import display
 from shap.utils import approximate_interactions
+import matplotlib.patches as patches
 
 
 def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display: np.ndarray = None,
@@ -467,7 +468,8 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
 
 
 def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None, color=None, fill=None, alpha=None,
-                                               show=True, ax=None, jitter=False):
+                                               show=True, ax=None, jitter=False,
+                                               mark_x_upwards=None, mark_x_downwards=None):
     if isinstance(feature, (int, np.integer)):
         feature = shap_values.feature_names[feature]
     s = shap_values[:, feature]
@@ -481,6 +483,14 @@ def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None,
         s_plot = s[mask]
         current_plot_colors = plot_colors[mask]
         sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha)
+    if mark_x_downwards is not None:
+        xlim = ax.get_xlim()
+        ax.axvspan(xlim[0], mark_x_downwards, color='grey', alpha=0.1)
+        ax.set_xlim(xlim)
+    if mark_x_upwards is not None:
+        xlim = ax.get_xlim()
+        ax.axvspan(mark_x_upwards, xlim[1], color='grey', alpha=0.1)
+        ax.set_xlim(xlim)
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)
@@ -542,14 +552,16 @@ def _scatter(x, y, ax=None, jitter=False, s=20, c='b', marker='o', cmap=None, no
     return func(x, y, s=s, c=c, marker=marker, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, alpha=alpha, linewidths=linewidths, **kwargs)
 
 
-def plot_feature_effects_per_feature(shap_values, feature, color=None, color_label=None, fill=None, alpha=None, show=True, jitter=False):
+def plot_feature_effects_per_feature(shap_values, feature, color=None, color_label=None, fill=None, alpha=None,
+                                     show=True, jitter=False, mark_x_upwards=None, mark_x_downwards=None):
     ncols = len(shap_values.output_names)
     fig, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
     sc = None
     for class_name, ax in zip(shap_values.output_names, axs.flat):
         sc = plot_feature_effects_per_class_per_feature(shap_values[:, :, class_name], feature,
                                                         title=class_name, color=color, fill=fill, alpha=alpha, show=False,
-                                                        ax=ax, jitter=jitter)
+                                                        ax=ax, jitter=jitter, mark_x_upwards=mark_x_upwards,
+                                                        mark_x_downwards=mark_x_downwards)
     if show:
         if color_label is not None and sc is not None:
             fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)

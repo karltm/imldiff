@@ -1,3 +1,4 @@
+import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, f1_score
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
 from sklearn.linear_model import LogisticRegression
@@ -113,3 +114,28 @@ def get_rules(tree, feature_names):
 
 def index_of(array, element):
     return np.where(array == element)[0][0]
+
+
+class RuleClassifier:
+    def __init__(self, feature_names, rules):
+        self.feature_names = feature_names
+        self.rules = rules
+        self.classes_ = [False, True]
+
+    def predict(self, X):
+        df = pd.DataFrame(X, columns=self.feature_names)
+        y_pred = np.repeat(False, df.shape[0])
+        for rule in self.rules:
+            indices = df.query(rule).index
+            y_pred[indices] = True
+        return y_pred
+
+    def query(self, X):
+        df = pd.DataFrame(X, columns=self.feature_names)
+        results = []
+        for rule in self.rules:
+            results.append(df.query(rule))
+        return pd.concat(results).drop_duplicates()
+
+
+

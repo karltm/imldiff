@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from comparers import plot_decision_boundary
 
-
 def _remove_occurences(l, s):
     l = list(l)
     previous_occurences = [p.startswith(s) for p in l]
@@ -51,16 +50,17 @@ def print_rules(tree, feature_names, class_names, focus_class=None, feature_orde
     ii = list(np.argsort(samples_count))
     paths = [paths[i] for i in reversed(ii)]
 
-    rules = []
+    constraints = []
     for path in paths:
         node_id = path[-1][2]
         rule = f"node #{node_id}: if "
 
+        constraint = ''
         for p in path[:-1]:
-            if not rule.endswith(': if '):
-                rule += " and "
-            rule += str(p)
-        rule += " then "
+            if constraint != '':
+                constraint += " and "
+            constraint += str(p)
+        rule += constraint + " then "
         if class_names is None:
             rule += "response: "+str(np.round(path[-1][0][0][0],3))
         else:
@@ -71,10 +71,10 @@ def print_rules(tree, feature_names, class_names, focus_class=None, feature_orde
             share = round(classes[current_class_idx]/sum(classes), 3)
             n_instances = int(classes.sum())
             rule += f"class {class_names[current_class_idx]} (covers {share} of {n_instances} instances)"
-        rules += [rule]
-
-    for rule in rules:
         print(rule)
+        constraints.append(constraint)
+
+    return constraints
 
 
 def get_node_ids_for_class(tree, class_idx):
@@ -124,6 +124,7 @@ def plot_tree_leafs_for_class(tree, tree_class_names, focus_classes, X, y, class
                            predict=predict_node,
                            predict_value_names=['other'] + node_ids,
                            fig=fig, ax=ax)
+
 
 def flatten(t):
     return [item for sublist in t for item in sublist]

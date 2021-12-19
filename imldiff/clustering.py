@@ -23,7 +23,7 @@ class Counterfactual:
 
 class Explanation:
     def __init__(self, comparer, root_shap_values, shap_values, diff_class=None, feature_precisions=None,
-                 cluster_classes=None, categorical_features=None):
+                 cluster_classes=None, categorical_features=None, parent=None):
         self.comparer = comparer
         self.root_shap_values = root_shap_values
         self.shap_values = shap_values
@@ -37,7 +37,10 @@ class Explanation:
         else:
             self.categorical_features = []
         self._set_classes()
-        self._calculate_counterfactuals()
+        if parent is not None and self.class_counts.get(self.diff_class) == parent.class_counts.get(self.diff_class):
+            self.counterfactuals = parent.counterfactuals
+        else:
+            self._calculate_counterfactuals()
         self._calculate_feature_order()
 
     @property
@@ -56,14 +59,11 @@ class Explanation:
         mask = np.isin(self.feature_names_ordered, list(self.counterfactuals.keys()))
         return self.feature_names_ordered[mask]
 
-    @property
-    def class_counts(self):
-        return pd.Series(self.pred_classes).value_counts()
-
     def _set_classes(self):
         self.is_different = self.comparer.predict_bin_diff(self.shap_values.data)
         self.pred_classes = self.comparer.predict_mclass_diff(self.shap_values.data)
         self.pred_classes = self.comparer.class_names[self.pred_classes]
+        self.class_counts = pd.Series(self.pred_classes).value_counts()
 
     def _calculate_counterfactuals(self):
         self.counterfactuals = {}
@@ -186,7 +186,8 @@ class Explanation:
 class ClusterNode(Explanation):
     def __init__(self, comparer, shap_values, node, parent, diff_class=None, cluster_classes=None,
                  categorical_features=None, feature_precisions=None):
-        super(ClusterNode, self).__init__(comparer, shap_values, shap_values[node.pre_order()], diff_class, feature_precisions, cluster_classes, categorical_features)
+        super(ClusterNode, self).__init__(comparer, shap_values, shap_values[node.pre_order()], diff_class,
+                                          feature_precisions, cluster_classes, categorical_features, parent)
         self.node = node
         self.parent = parent
         self.root = self if parent is None else parent.root
@@ -224,6 +225,24 @@ class ClusterNode(Explanation):
             return self.get_right().get(name[1:])
         else:
             return self
+
+    def get_last_child_before_diff_class_split(self):
+        if not self.diff_class in list(self.class_counts.keys()):
+            raise Exception('Difference class not present in cluster')
+        if len(self.shap_values) == 1:
+            return self
+        left = self.get_left()
+        right = self.get_right()
+        if not self.diff_class in list(left.class_counts.keys()):
+            return right.get_last_child_before_diff_class_split()
+        if not self.diff_class in list(right.class_counts.keys()):
+            return left.get_last_child_before_diff_class_split()
+        return self
+
+    def get_parent(self, n=1):
+        if self.parent is None or n == 0:
+            return self
+        return self.parent.get_parent(n - 1)
 
     def describe_feature(self, feature):
         s = self.shap_values[:, feature]

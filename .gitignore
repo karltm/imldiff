@@ -131,3 +131,4 @@ src/version.ts
 *.diro2c
 *.pickle
 *.comparer
+*/old/*

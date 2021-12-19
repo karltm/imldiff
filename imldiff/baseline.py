@@ -2,6 +2,8 @@ from sklearn.tree import _tree, plot_tree
 import numpy as np
 import matplotlib.pyplot as plt
 from comparers import plot_decision_boundary
+from util import index_of
+
 
 def _remove_occurences(l, s):
     l = list(l)
@@ -14,6 +16,7 @@ def _remove_occurences(l, s):
 
 def print_rules(tree, feature_names, class_names, focus_class=None, feature_order=None, precision=0, X_test=None, y_test=None):
     """Adapted from: https://mljar.com/blog/extract-rules-decision-tree/"""
+    class_names = class_names[tree.classes_]
 
     if feature_order is None:
         feature_order = np.arange(len(feature_names))
@@ -39,7 +42,16 @@ def print_rules(tree, feature_names, class_names, focus_class=None, feature_orde
             p2 += [f"({name} > {round(threshold, precision)})"]
             recurse(tree_.children_right[node], p2, paths)
         else:
-            path = sorted(path, key=lambda x: np.argwhere(feature_names[feature_order] == x.split('(')[1].split(' ')[0])[0][0] + (0.5 if '<=' in x else 0))
+            def get_feature_order_for_path(path):
+                end_idx = path.find(' >')
+                addition = 0.0
+                if end_idx < 0:
+                    end_idx = path.find(' <')
+                    addition = 0.5
+                feature = path[1:end_idx]
+                order = index_of(feature_names[feature_order], feature)
+                return order + addition
+            path = sorted(path, key=get_feature_order_for_path)
             path += [(tree_.value[node], tree_.n_node_samples[node], node)]
             paths += [path]
 
@@ -107,9 +119,13 @@ def evaluate(tree, focus_class, focus_class_idx, X_test=None, y_test=None):
             print(f'coverage (test set ground truth): {n_focus_nodes_present/len(focus_indices)}')
 
 
-def plot_tree_leafs_for_class(tree, tree_class_names, focus_classes, X, y, class_names, feature_names):
+def plot_tree_leafs_for_class(tree, tree_class_names, focus_classes, X, y, class_names, feature_names, feature_x=0, feature_y=1):
     if isinstance(focus_classes, str):
         focus_classes = [focus_classes]
+    if isinstance(feature_x, str):
+        feature_x = index_of(feature_names, feature_x)
+    if isinstance(feature_y, str):
+        feature_y = index_of(feature_names, feature_y)
     focus_class_indices = [np.where(tree_class_names == focus_class)[0][0] for focus_class in focus_classes]
     node_ids = [get_node_ids_for_class(tree, focus_class_idx).tolist() for focus_class_idx in focus_class_indices]
     node_ids = flatten(node_ids)
@@ -118,7 +134,7 @@ def plot_tree_leafs_for_class(tree, tree_class_names, focus_classes, X, y, class
     predict_node = lambda X: np.array([mapping.get(node_id, 0) for node_id in tree.apply(X)])
 
     fig, ax = plt.subplots(figsize=(7, 7))
-    plot_decision_boundary(X, y,
+    plot_decision_boundary(X, y, idx_x=feature_x, idx_y=feature_y,
                            feature_names=feature_names,
                            class_names=class_names,
                            predict=predict_node,

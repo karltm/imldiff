@@ -10,7 +10,7 @@ from sklearn.tree import plot_tree
 import rule_extractor
 import pandas as pd
 import numpy as np
-from util import index_of
+from util import index_of, CombinationClassifier
 import matplotlib.pyplot as plt
 
 
@@ -21,17 +21,6 @@ class PrescaleClassifier:
 
     def predict(self, X):
         return self.clf.predict(X * self.factors)
-
-
-class CombinationClassifier:
-    def __init__(self, comparer, label_explain_a, label_explain_b):
-        self.comparer = comparer
-        self.label_explain_a = label_explain_a
-        self.label_explain_b = label_explain_b
-
-    def predict(self, X):
-        return (self.comparer.clf_a.predict(X) == self.label_explain_a) & \
-               (self.comparer.clf_b.predict(X) == self.label_explain_b)
 
 
 class ConstantClassifier:
@@ -59,8 +48,7 @@ class WrappedDiro2C:
 
         self.focus_class = focus_class
         if self.focus_class is not None:
-            label_explain_a, label_explain_b = comparer.class_tuples[index_of(comparer.class_names, self.focus_class)]
-            self.clf_a = CombinationClassifier(comparer, label_explain_a, label_explain_b)
+            self.clf_a = CombinationClassifier(comparer, self.focus_class)
             self.clf_b = ConstantClassifier()
             self.method = diff_classifier_method_type.binary_diff_classifier
             self.class_names = np.array(['not ' + self.focus_class, self.focus_class])

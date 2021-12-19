@@ -1,3 +1,5 @@
+from ast import literal_eval
+
 import pandas as pd
 from sklearn.metrics import brier_score_loss, precision_score, recall_score, f1_score
 from sklearn.calibration import CalibratedClassifierCV, calibration_curve
@@ -138,4 +140,11 @@ class RuleClassifier:
         return pd.concat(results).drop_duplicates()
 
 
+class CombinationClassifier:
+    def __init__(self, comparer, label):
+        self.comparer = comparer
+        self.label_explain_a, self.label_explain_b = literal_eval(label)
 
+    def predict(self, X):
+        return (self.comparer.clf_a.predict(X) == self.label_explain_a) & \
+               (self.comparer.clf_b.predict(X) == self.label_explain_b)

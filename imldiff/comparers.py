@@ -230,19 +230,20 @@ class ModelComparer:
             diff_predictions = predict_multiclass(X)
             
             fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
-            fig.suptitle('Binary difference classifier', fontsize='x-large')
-            plot_decision_boundary(X, binary_diff_predictions, 'Labels different', self.feature_names,
-                                   predict=predict_binary, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim, **kwargs)
+            outcome_space_readable = 'Probability' if kind == 'proba' else 'Log odds'
+            plot_decision_boundary(X, binary_diff_predictions, feature_names=self.feature_names, predict=predict_binary,
+                                   zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim,
+                                   z_label=outcome_space_readable + ' of different outcomes', **kwargs)
             
             nclasses = len(self.mclass_diff_clf.base_classes_)
             fig, axs = plt.subplots(nrows=nclasses, ncols=nclasses, sharex=True, sharey=True,
                                     figsize=(nclasses*7, nclasses*7), constrained_layout=True)
-            fig.suptitle('Multiclass difference classifier', fontsize='x-large')
             for class_idx, ax in zip(self.mclass_diff_clf.classes_, axs.flatten()):
                 class_name = str(self.mclass_diff_clf.class_tuples_[class_idx])
                 predict = lambda X: predict_multiclass(X)[:, class_idx]
                 plot_decision_boundary(X, diff_predictions[:, class_idx], class_name, self.feature_names,
-                                       predict=predict, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim, **kwargs)
+                                       predict=predict, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim,
+                                       z_label=f'{outcome_space_readable} of {class_name}', **kwargs)
                 
     def plot_confusion_matrix(self, X):
         pred_a = self.clf_a.predict(X)
@@ -278,7 +279,7 @@ def _calc_log_odds_from_log_proba(log_proba):
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
                            idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
                            fig=None, ax=None, xlim=None, ylim=None, predict_value_names=None,
-                           show_contour_legend=False, **kwargs):
+                           show_contour_legend=False, z_label=None, **kwargs):
     """
     - X: instances to plot
     - z: color of instances
@@ -329,7 +330,7 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
             proxy = [plt.Rectangle((0,0),1,1,fc = pc.get_facecolor()[0])
                      for pc in cs.collections]
             if show_contour_legend:
-                legend1 = ax.legend(proxy, predict_value_names, loc='upper left')
+                legend1 = ax.legend(proxy, predict_value_names, loc='upper left', label=z_label)
         for class_idx, class_ in enumerate(class_names):
             X_ = X_display[z == class_idx, :]
             if X_.shape[0] == 0:
@@ -342,7 +343,7 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         if draw_contours:
             levels = np.linspace(zlim[0], zlim[1], 21)
             cs = ax.contourf(xx, yy, z_pred, levels, cmap=colors.red_blue, alpha=.8)
-            fig.colorbar(cs, ax=ax, shrink=0.9)
+            fig.colorbar(cs, ax=ax, shrink=0.9, label=z_label)
         ax.scatter(X[:, idx_x], X[:, idx_y], c=z, cmap=colors.red_blue, vmin=zlim[0], vmax=zlim[1], edgecolors='k', **kwargs)
 
     if feature_names is not None:

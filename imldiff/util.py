@@ -115,7 +115,7 @@ def get_rules(tree, feature_names):
 
 
 def index_of(array, element):
-    return np.where(array == element)[0][0]
+    return np.where(np.array(array) == element)[0][0]
 
 
 class RuleClassifier:

@@ -1,12 +1,8 @@
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.utils.validation import check_X_y, check_array, check_is_fitted
-from sklearn.utils.multiclass import unique_labels
+from sklearn.utils.validation import check_array, check_is_fitted
 import itertools
 import numpy as np
 from scipy.special import logsumexp
-
-
-complement_log_proba = lambda log_proba: np.log1p(-np.exp(log_proba))
 
 
 class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
@@ -41,7 +37,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         Predict probabilities for the two classes, the output shape is (n, 2)
         """
         if not len(self.clf_a.classes_) == 2:
-            raise Exception('Probability estimates are only available for binary base classifiers')
+            raise Exception('Probability estimates are undefined for multiclass classification problems')
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
@@ -54,12 +50,16 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         the output shape is (n, 2)
         """
         if not len(self.clf_a.classes_) == 2:
-            raise Exception('Probability estimates are only available for binary base classifiers')
+            raise Exception('Probability estimates are undefined for multiclass classification problems')
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)
         log_proba_b = self.clf_b.predict_log_proba(X)
         log_proba_pos = logsumexp(log_proba_a + log_proba_b, axis=1)
         return np.vstack((log_proba_pos, complement_log_proba(log_proba_pos))).T
+
+
+def complement_log_proba(log_proba):
+    return np.log1p(-np.exp(log_proba))
 
 
 class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):

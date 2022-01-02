@@ -4,8 +4,9 @@ import numpy as np
 from difference_models import BinaryDifferenceClassifier, MulticlassDifferenceClassifier
 from shap.plots import colors
 from scipy.special import logsumexp
-import matplotlib.cm as cm
 
+
+plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 
 class ModelComparer:
@@ -17,18 +18,24 @@ class ModelComparer:
         self.clf_b = clf_b
         self.bin_diff_clf = BinaryDifferenceClassifier(clf_a, clf_b)
         self.mclass_diff_clf = MulticlassDifferenceClassifier(clf_a, clf_b)
+        self.classifier_names = np.array(['A', 'B'])
+        self.bin_class_names = np.array(['equal', 'different'])
         
     def fit(self, X, y):
         return self
- 
+
+    @property
+    def has_log_odds_support(self):
+        return hasattr(self.clf_a, 'predict_log_proba') and hasattr(self.clf_b, 'predict_log_proba')
+
+    @property
+    def has_probability_support(self):
+        return hasattr(self.clf_a, 'predict_proba') and hasattr(self.clf_b, 'predict_proba')
+
     @property
     def classifiers(self):
         return self.clf_a, self.clf_b
 
-    @property
-    def classifier_names(self):
-        return ['A', 'B']
-    
     @property
     def base_classes(self):
         return self.mclass_diff_clf.base_classes_
@@ -36,15 +43,21 @@ class ModelComparer:
     @property
     def base_class_names(self):
         return np.array([str(label) for label in self.base_classes])
-    
+
+    @property
+    def combined_class_names(self):
+        return np.array([f'{clf_name}.{class_name}'
+                         for clf_name in self.classifier_names
+                         for class_name in self.base_class_names])
+
     @property
     def is_binary_classification_task(self):
         return len(self.base_classes) == 2
-    
+
     @property
     def classes(self):
         return self.mclass_diff_clf.classes_
-    
+
     @property
     def class_tuples(self):
         return self.mclass_diff_clf.class_tuples_
@@ -68,54 +81,42 @@ class ModelComparer:
     @property
     def equality_class_names(self):
         return self.class_names[self.equality_classes]
-    
-    @property
-    def predict_functions(self):
-        return dict([(clf_name, clf.predict)
-                     for clf_name, clf in zip(self.classifier_names, self.classifiers)])
-    
-    @property
-    def predict_one_hot_functions(self):
-        return dict([(clf_name, lambda X, f=f: _encode_one_hot(f(X), self.base_classes))
-                     for clf_name, f in self.predict_functions.items()])
 
-    @property
-    def predict_proba_functions(self):
-        return dict([(clf_name, clf.predict_proba)
-                      for clf_name, clf in zip(self.classifier_names, self.classifiers)])
+    def predict_combined_oh_encoded(self, X):
+        y_pred_a = _encode_one_hot(self.clf_a.predict(X), self.base_classes)
+        y_pred_b = _encode_one_hot(self.clf_b.predict(X), self.base_classes)
+        return np.concatenate([y_pred_a, y_pred_b], axis=1)
 
-    @property
-    def predict_log_odds_functions(self):
-        return dict([(clf_name, lambda X, clf=clf: _calc_log_odds_from_log_proba(clf.predict_log_proba(X)))
-                     for clf_name, clf in zip(self.classifier_names, self.classifiers)])
+    def predict_combined_proba(self, X):
+        y_pred_a = self.clf_a.predict_proba(X)
+        y_pred_b = self.clf_b.predict_proba(X)
+        return np.concatenate([y_pred_a, y_pred_b], axis=1)
 
-    @property
-    def predict_bin_diff(self):
-        return self.bin_diff_clf.predict
-    
-    @property
-    def predict_bin_diff_proba(self):
-        return lambda X: self.bin_diff_clf.predict_proba(X)[:, 1]
-    
-    @property
-    def predict_bin_diff_log_odds(self):
-        return lambda X: _calc_binary_log_odds_from_log_proba(self.bin_diff_clf.predict_log_proba(X))
-    
-    @property
-    def predict_mclass_diff(self):
-        return self.mclass_diff_clf.predict
-    
-    @property
-    def predict_mclass_diff_one_hot(self):
-        return lambda X: _encode_one_hot(self.predict_mclass_diff(X), self.classes)
-    
-    @property
-    def predict_mclass_diff_proba(self):
-        return self.mclass_diff_clf.predict_proba
-    
-    @property
-    def predict_mclass_diff_log_odds(self):
-        return lambda X: _calc_log_odds_from_log_proba(self.mclass_diff_clf.predict_log_proba(X))
+    def predict_combined_log_odds(self, X):
+        y_pred_a = _calc_log_odds_from_log_proba(self.clf_a.predict_log_proba(X))
+        y_pred_b = _calc_log_odds_from_log_proba(self.clf_b.predict_proba(X))
+        return np.concatenate([y_pred_a, y_pred_b], axis=1)
+
+    def predict_bin_diff(self, X):
+        return self.bin_diff_clf.predict(X)
+
+    def predict_bin_diff_proba(self, X):
+        return self.bin_diff_clf.predict_proba(X)[:, 1]
+
+    def predict_bin_diff_log_odds(self, X):
+        return _calc_binary_log_odds_from_log_proba(self.bin_diff_clf.predict_log_proba(X))
+
+    def predict_mclass_diff(self, X):
+        return self.mclass_diff_clf.predict(X)
+
+    def predict_mclass_diff_oh_encoded(self, X):
+        return _encode_one_hot(self.mclass_diff_clf.predict(X), self.classes)
+
+    def predict_mclass_diff_proba(self, X):
+        return self.mclass_diff_clf.predict_proba(X)
+
+    def predict_mclass_diff_log_odds(self, X):
+        return _calc_log_odds_from_log_proba(self.mclass_diff_clf.predict_log_proba(X))
 
     def plot_individual_clf_decision_boundaries(self, X, X_display=None, y_true=None, separate=False,
                                                 kind='label', idx_x=0, idx_y=1, zlim=None, **kwargs):
@@ -124,7 +125,9 @@ class ModelComparer:
             class_names = self.mclass_diff_clf.base_classes_
             if not separate:
                 fig, axs = plt.subplots(ncols=2, sharey=True, figsize=(2*7, 7), constrained_layout=True)
-                for (clf_name, predict), ax in zip(self.predict_functions.items(), axs):
+                for clf_name, predict, ax in zip(self.classifier_names,
+                                                 [self.clf_a.predict, self.clf_b.predict],
+                                                 axs):
                     plot_decision_boundary(X, y_true, clf_name, self.feature_names, X_display,
                                            predict=predict, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
@@ -134,7 +137,9 @@ class ModelComparer:
                                         figsize=(2*7, len(self.base_classes)*7),
                                         constrained_layout=True, squeeze=False)
                 
-                for (clf_name, predict), axs_row in zip(self.predict_functions.items(), axs.T):
+                for clf_name, predict, axs_row in zip(self.classifier_names,
+                                                        [self.clf_a.predict, self.clf_b.predict],
+                                                        axs.T):
                     y_pred = predict(X)
                     masks = [y_pred == label for label in self.base_classes]
                     for mask, ax in zip(masks, axs_row):
@@ -145,11 +150,12 @@ class ModelComparer:
                                                fig=fig, ax=ax, **kwargs)
         else:
             if kind == 'proba':
-                predict_functions = self.predict_proba_functions
+                predict_functions = [self.clf_a.predict_proba, self.clf_b.predict_proba]
                 if zlim is None:
                     zlim = (0, 1)
             elif kind == 'log-odds':
-                predict_functions = self.predict_log_odds_functions
+                predict_functions = [lambda X: _calc_log_odds_from_log_proba(self.clf_a.predict_log_proba(X)),
+                                     lambda X: _calc_log_odds_from_log_proba(self.clf_b.predict_log_proba(X))]
                 if zlim is None:
                     zlim = (-4, 4)
                 y_true[y_true == self.mclass_diff_clf.base_classes_[0]] = zlim[0]
@@ -164,15 +170,14 @@ class ModelComparer:
 
             fig, axs = plt.subplots(nrows=len(plot_classes), ncols=2, sharex=True, sharey=True,
                                     figsize=(2*7, len(plot_classes)*7), constrained_layout=True, squeeze=False)
-            for (clf_name, predict), axs_row in zip(predict_functions.items(), axs.T):
+            for clf_name, predict, axs_row in zip(self.classifier_names, predict_functions, axs.T):
                 for class_idx, ax in zip(plot_classes, axs_row.flatten()):
                     predict_class = lambda X: predict(X)[:, class_idx]
                     plot_decision_boundary(X, y_true, clf_name, self.feature_names, X_display,
                                            predict=predict_class, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
-        fig.suptitle('Base classification task with decision boundaries of the classifiers', fontsize='x-large')
-        
+
     def plot_decision_boundaries(self, X, X_display=None, kind='label', separate=False, idx_x=0, idx_y=1,
                                  xlim=None, ylim=None, zlim=None, **kwargs):
         if kind == 'label':
@@ -189,11 +194,10 @@ class ModelComparer:
                                     constrained_layout=True, squeeze=False)
             if separate:
                 axs = axs.T
-            fig.suptitle('Difference classifiers and their decision boundaries', fontsize='x-large')
             for mask, axs in zip(masks, axs):
                 plot_decision_boundary(X[mask],
                                        binary_label_diff[mask],
-                                       'Labels different',
+                                       'Binary difference classifier',
                                        self.feature_names,
                                        X_display=X_display[mask] if X_display is not None else None,
                                        predict=self.predict_bin_diff,
@@ -202,7 +206,7 @@ class ModelComparer:
                                        idx_x=idx_x, idx_y=idx_y, xlim=xlim, ylim=ylim, zlim=zlim, **kwargs)
                 plot_decision_boundary(X[mask],
                                        label_diff[mask],
-                                       'Difference classes for predicted labels',
+                                       'Multiclass difference classifier',
                                        self.feature_names,
                                        X_display=X_display[mask] if X_display is not None else None,
                                        predict=self.predict_mclass_diff,
@@ -226,14 +230,14 @@ class ModelComparer:
             diff_predictions = predict_multiclass(X)
             
             fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
-            fig.suptitle('Binary difference classifier and its decision boundary', fontsize='x-large')
+            fig.suptitle('Binary difference classifier', fontsize='x-large')
             plot_decision_boundary(X, binary_diff_predictions, 'Labels different', self.feature_names,
                                    predict=predict_binary, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim, **kwargs)
             
             nclasses = len(self.mclass_diff_clf.base_classes_)
             fig, axs = plt.subplots(nrows=nclasses, ncols=nclasses, sharex=True, sharey=True,
                                     figsize=(nclasses*7, nclasses*7), constrained_layout=True)
-            fig.suptitle('Multiclass difference classifier and its decision boundaries', fontsize='x-large')
+            fig.suptitle('Multiclass difference classifier', fontsize='x-large')
             for class_idx, ax in zip(self.mclass_diff_clf.classes_, axs.flatten()):
                 class_name = str(self.mclass_diff_clf.class_tuples_[class_idx])
                 predict = lambda X: predict_multiclass(X)[:, class_idx]
@@ -269,9 +273,6 @@ def _calc_log_odds_from_log_proba(log_proba):
         class_mask[i] = False
         log_odds[:, i] = log_proba[:, i] - logsumexp(log_proba[:, class_mask], axis=1)
     return log_odds
-
-
-plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 
 
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,

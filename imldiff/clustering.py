@@ -1,9 +1,12 @@
 import pandas as pd
 import numpy as np
-import scipy as sp
+from scipy.spatial import distance
+from scipy.cluster import hierarchy
 import matplotlib.pyplot as plt
+import seaborn as sns
 from IPython.display import display
-from explainers import plot_feature_effects_per_feature, ensure_are_shap_values, calc_feature_order
+from explainers import plot_feature_dependencies_for_classes, calc_feature_order
+from util import index_of
 
 
 class Counterfactual:
@@ -22,11 +25,15 @@ class Counterfactual:
 
 
 class Explanation:
-    def __init__(self, comparer, root_shap_values, shap_values, diff_class=None, feature_precisions=None,
-                 cluster_classes=None, categorical_features=None, parent=None):
+    def __init__(self, comparer, root_shap_values, instance_indices, diff_class=None, feature_precisions=None,
+                 cluster_classes=None, categorical_features=None, parent=None, root_is_different=None, root_pred_classes=None):
         self.comparer = comparer
+        self.parent = parent
+        self.root = self if parent is None else parent.root
         self.root_shap_values = root_shap_values
-        self.shap_values = shap_values
+        self.instance_indices = instance_indices
+        self.shap_values = root_shap_values[instance_indices]
+        self.data = pd.DataFrame(self.shap_values.data, columns=self.shap_values.feature_names, index=instance_indices)
         self.diff_class = diff_class
         self.feature_precisions = feature_precisions
         if self.feature_precisions is None:
@@ -36,7 +43,12 @@ class Explanation:
             self.categorical_features = categorical_features
         else:
             self.categorical_features = []
-        self._set_classes()
+
+        self.root_is_different = root_is_different
+        self.root_pred_classes = root_pred_classes
+        self.is_different = root_is_different[instance_indices]
+        self.pred_classes = root_pred_classes[instance_indices]
+        self.class_counts = pd.Series(self.pred_classes).value_counts()
         if parent is not None and self.class_counts.get(self.diff_class) == parent.class_counts.get(self.diff_class):
             self.counterfactuals = parent.counterfactuals
         else:
@@ -59,19 +71,13 @@ class Explanation:
         mask = np.isin(self.feature_names_ordered, list(self.counterfactuals.keys()))
         return self.feature_names_ordered[mask]
 
-    def _set_classes(self):
-        self.is_different = self.comparer.predict_bin_diff(self.shap_values.data)
-        self.pred_classes = self.comparer.predict_mclass_diff(self.shap_values.data)
-        self.pred_classes = self.comparer.class_names[self.pred_classes]
-        self.class_counts = pd.Series(self.pred_classes).value_counts()
-
     def _calculate_counterfactuals(self):
         self.counterfactuals = {}
         if np.sum(self.highlight) == 0 or self.diff_class is None:
             return
         for feature_idx, feature in enumerate(self.shap_values.feature_names):
-            cf_up = self.find_cf_up(feature)
-            cf_down = self.find_cf_down(feature)
+            cf_up = self._find_upper_counterfactual(feature)
+            cf_down = self._find_lower_counterfactual(feature)
             if cf_up.is_including_class(self.diff_class):
                 cf_up = None
             if cf_down.is_including_class(self.diff_class):
@@ -82,125 +88,168 @@ class Explanation:
     def _calculate_feature_order(self):
         self.feature_order, self.feature_importances = calc_feature_order(self.shap_values)
 
-    def find_cf_up(self, feature):
-        return self._find_cf(feature, upwards=True)
+    def _find_upper_counterfactual(self, feature):
+        return self._find_counterfactual(feature, upwards=True)
 
-    def find_cf_down(self, feature):
-        return self._find_cf(feature, upwards=False)
+    def _find_lower_counterfactual(self, feature):
+        return self._find_counterfactual(feature, upwards=False)
 
-    def _find_cf(self, feature, upwards):
-        if isinstance(feature, str):
-            feature_idx = np.where(self.comparer.feature_names == feature)[0][0]
-        else:
-            feature_idx = feature
-            feature = self.comparer.feature_names[feature_idx]
+    def _find_counterfactual(self, feature, upwards):
+        feature_idx, feature_name = self._check_feature(feature)
         diff_class_idx = np.where(self.comparer.class_names == self.diff_class)[0][0]
-        s = self.shap_values[self.highlight]
-        X_mod = s.data.copy()
+        X_mod = self.data.iloc[self.highlight, :].copy()
         precision = self.feature_precisions[feature_idx]
         if upwards:
             sign = 1
-            start = round(self.shap_values[self.highlight, feature].data.max(), precision)
-            limit = self.root_shap_values[:, feature].data.max()
+            start = round(self.data.iloc[self.highlight, feature_idx].max(), precision)
+            limit = self.root.data.iloc[:, feature_idx].max()
         else:
             sign = -1
-            start = round(self.shap_values[self.highlight, feature].data.min(), precision)
-            limit = self.root_shap_values[:, feature].data.min()
+            start = round(self.data.iloc[self.highlight, feature_idx].min(), precision)
+            limit = self.root.data.iloc[:, feature_idx].min()
         step = sign * 10 ** -precision
         y_mod = None
         for value in np.arange(start, limit + step, step):
-            X_mod[:, feature_idx] = round(value, precision)
+            X_mod.iloc[:, feature_idx] = round(value, precision)
             y_mod = self.comparer.predict_mclass_diff(X_mod)
             if np.all(y_mod != diff_class_idx):
                 break
         class_counts = dict(pd.Series(self.comparer.class_names[y_mod]).value_counts())
-        return Counterfactual(feature, value=X_mod[0, feature_idx], is_direction_up=upwards, outcomes=class_counts)
+        return Counterfactual(feature_name, value=X_mod.iloc[0, feature_idx], is_direction_up=upwards, outcomes=class_counts)
 
     def describe_counterfactuals(self, feature):
-        cf_down, cf_up = self.counterfactuals[feature]
+        _, feature_name = self._check_feature(feature)
+        cf_down, cf_up = self.counterfactuals.get(feature_name, (None, None))
         if cf_down is not None:
             print(cf_down)
         if cf_up is not None:
             print(cf_up)
 
     def describe_feature_differences(self, feature):
-        data = self.shap_values[self.highlight, feature].data
-        lower_bound = data.min()
-        upper_bound = data.max()
+        feature_idx, feature_name = self._check_feature(feature)
+        feature_data = self.data.iloc[self.highlight, feature_idx]
+        lower_bound = feature_data.min()
+        upper_bound = feature_data.max()
         if lower_bound == upper_bound:
-            print(f'{feature} == {lower_bound}', end='')
+            print(f'{feature_name} == {lower_bound}', end='')
         else:
-            if lower_bound > self.root_shap_values[:, feature].data.min():
+            if lower_bound > self.root.data.iloc[:, feature_idx].min():
                 print(f'{lower_bound} <= ', end='')
-            print(feature, end='')
-            if upper_bound < self.root_shap_values[:, feature].data.max():
+            print(feature_name, end='')
+            if upper_bound < self.root.data.iloc[:, feature_idx].max():
                 print(f' <= {upper_bound}', end='')
         print()
 
     def filter(self, mask):
-        return Explanation(self.comparer, self.root_shap_values, self.shap_values[mask], self.diff_class,
-                           self.feature_precisions, self.cluster_classes, self.categorical_features)
+        return Explanation(self.comparer, self.root_shap_values, self.instance_indices[mask], self.diff_class,
+                           self.feature_precisions, self.cluster_classes, self.categorical_features, self,
+                           self.root_is_different, self.root_pred_classes)
 
-    def test(self, **kwargs):
-        X_test = pd.DataFrame(self.shap_values.data.copy(), columns=self.shap_values.feature_names)
-        y_before = pd.Series(self.comparer.class_names[self.comparer.predict_mclass_diff(X_test)])
-        for key, value in kwargs.items():
-            X_test[key] = value
-        y_after = pd.Series(self.comparer.class_names[self.comparer.predict_mclass_diff(X_test)])
-        display(pd.DataFrame({'before': y_before[self.highlight].value_counts(),
-                              'after': y_after[self.highlight].value_counts()}))
-
-    def plot_feature(self, feature, classes=None, alpha=None, color=None, fill=None, counterfactuals=None):
-        if isinstance(feature, str):
-            feature_idx = np.where(self.comparer.feature_names == feature)[0][0]
+    def plot_feature_dependence(self, feature, classes=None, alpha=None, color=None, fill=None, focus=None):
+        if focus is not None:
+            fill = np.in1d(self.instance_indices, focus.instance_indices)
+            counterfactuals = focus.counterfactuals
         else:
-            feature_idx = feature
-            feature = self.comparer.feature_names[feature_idx]
+            counterfactuals = self.counterfactuals
+        feature_idx, feature_name = self._check_feature(feature)
         if classes is None:
             classes = self.cluster_classes
         if color is None:
             color = self.highlight
-        color_feature = None
-        if isinstance(color, int):
-            color_feature = self.shap_values.feature_names[color]
-        if isinstance(color, str):
-            color_feature = color
-        if color_feature is not None:
-            color = self.shap_values[:, color_feature].data
-        if counterfactuals is None:
-            counterfactuals = self.counterfactuals
-        jitter = self.shap_values[:, feature].feature_names in self.categorical_features
-        s = ensure_are_shap_values(self.shap_values)[:, :, classes]
+            color_feature_name = None
+        else:
+            color_feature_idx, color_feature_name = self._check_feature(color)
+            color = self.data.iloc[:, color_feature_idx]
+        jitter = feature_name in self.categorical_features
+        s = self.shap_values[:, :, classes]
         mark_x_downwards = None
         mark_x_upwards = None
-        if feature in counterfactuals:
-            cf_down, cf_up = counterfactuals[feature]
+        if feature_name in counterfactuals:
+            cf_down, cf_up = counterfactuals[feature_name]
             if cf_down is not None:
                 mark_x_downwards = cf_down.value
             if cf_up is not None:
                 mark_x_upwards = cf_up.value
-        plot_feature_effects_per_feature(s, feature, color=color, color_label=color_feature, fill=fill, alpha=alpha,
-                                         jitter=jitter, mark_x_upwards=mark_x_upwards, mark_x_downwards=mark_x_downwards)
+        plot_feature_dependencies_for_classes(s, feature, color=color, color_label=color_feature_name, fill=fill,
+                                              alpha=alpha, jitter=jitter,
+                                              mark_x_upwards=mark_x_upwards, mark_x_downwards=mark_x_downwards)
+
+    def _check_feature(self, feature):
+        if isinstance(feature, str):
+            feature_idx = np.where(self.comparer.feature_names == feature)[0][0]
+            feature_name = feature
+        else:
+            feature_idx = feature
+            feature_name = self.comparer.feature_names[feature_idx]
+        return feature_idx, feature_name
+
+    def plot_outcome_differences(self):
+        diff_class_idx = index_of(self.comparer.class_names, self.diff_class)
+        other_classes = [class_ for class_ in self.cluster_classes if class_ != self.diff_class]
+        other_class_indices = [index_of(self.comparer.class_names, class_) for class_ in other_classes]
+        s = self.shap_values
+        log_odds_per_class = s.base_values + s.values.sum(1)
+        log_odds_of_diff_class = log_odds_per_class[:, diff_class_idx]
+        log_odds_of_other_classes = log_odds_per_class[:, other_class_indices]
+        log_odds_diff = log_odds_of_other_classes - np.array([log_odds_of_diff_class for _ in other_class_indices]).T
+
+        classes = np.concatenate([np.repeat(class_, len(log_odds_diff)) for class_ in other_classes])
+        class_labels = np.concatenate([self.pred_classes for _ in other_class_indices])
+        df = pd.DataFrame([classes, log_odds_diff.T.flatten(), class_labels],
+                          index=['class', 'difference', 'actual class']).T
+        chart = sns.catplot(x='class', y='difference', hue='actual class', data=df, alpha=0.6, aspect=2, legend=False)
+        chart.axes[0][0].axhline(y=0, color='black', linewidth=1, alpha=0.5)
+        plt.legend(loc='upper right')
+        plt.show()
+        diff_ranges_of_diff_class = [f'{round(col.min(), 2)} to {round(col.max(), 2)}'
+                                     for col in log_odds_diff[self.highlight].T]
+        print(dict(zip(other_classes, diff_ranges_of_diff_class)))
+
+    def get_parent(self, n=1):
+        if self.parent is None or n == 0:
+            return self
+        return self.parent.get_parent(n - 1)
+
+    def describe_feature(self, feature):
+        feature_idx, feature_name = self._check_feature(feature)
+        feature_data = self.data.iloc[:, feature_idx]
+        root_feature_data = self.root.data.iloc[:, feature_idx]
+        if feature_name in self.categorical_features:
+            return pd.DataFrame([
+                root_feature_data.value_counts(),
+                feature_data.value_counts(),
+                feature_data.iloc[self.highlight].value_counts()
+            ], index=['global', 'local-all', 'local-diff'])
+        else:
+            return pd.DataFrame(index=['global', 'local-all', 'local-diff'], data=[
+                root_feature_data,
+                feature_data,
+                feature_data.iloc[self.highlight]]).T.describe()
 
 
-class ClusterNode(Explanation):
-    def __init__(self, comparer, shap_values, node, parent, diff_class=None, cluster_classes=None,
-                 categorical_features=None, feature_precisions=None):
-        super(ClusterNode, self).__init__(comparer, shap_values, shap_values[node.pre_order()], diff_class,
-                                          feature_precisions, cluster_classes, categorical_features, parent)
-        self.node = node
-        self.parent = parent
-        self.root = self if parent is None else parent.root
+class ExplanationNode(Explanation):
+    def __init__(self, comparer, root_shap_values, cluster_node, parent, diff_class=None, cluster_classes=None,
+                 categorical_features=None, feature_precisions=None, distance_matrix=None, linkage_matrix=None,
+                 root_is_different=None, root_pred_classes=None):
+        super(ExplanationNode, self).__init__(comparer, root_shap_values, np.array(cluster_node.pre_order()), diff_class,
+                                              feature_precisions, cluster_classes, categorical_features, parent,
+                                              root_is_different, root_pred_classes)
+        self.cluster_node = cluster_node
+        self.distance_matrix = distance_matrix
+        self.linkage_matrix = linkage_matrix
+        self.instance_indices_different = np.in1d(self.instance_indices, self.root.instance_indices[self.root.highlight])
+        self.left = None
+        self.right = None
 
     @property
     def distance(self):
         """Distance for this cluster in the distance matrix (metric='sqeuclidean')"""
-        return self.node.dist
+        return self.cluster_node.dist
 
     def __repr__(self):
         if self.parent is None:
             return 'root'
-        if self.parent.node.get_left().id == self.node.id:
+        if self.parent.cluster_node.get_left().id == self.cluster_node.id:
             name = 'L'
         else:
             name = 'R'
@@ -210,14 +259,6 @@ class ClusterNode(Explanation):
         else:
             return parent_name + name
 
-    def get_left(self):
-        return ClusterNode(self.comparer, self.root_shap_values, self.node.get_left(), self, self.diff_class,
-                           self.cluster_classes, self.categorical_features, self.feature_precisions)
-
-    def get_right(self):
-        return ClusterNode(self.comparer, self.root_shap_values, self.node.get_right(), self, self.diff_class,
-                           self.cluster_classes, self.categorical_features, self.feature_precisions)
-
     def get(self, name):
         if name.startswith('L'):
             return self.get_left().get(name[1:])
@@ -225,6 +266,20 @@ class ClusterNode(Explanation):
             return self.get_right().get(name[1:])
         else:
             return self
+
+    def get_left(self):
+        if self.left is None:
+            self.left = ExplanationNode(self.comparer, self.root_shap_values, self.cluster_node.get_left(), self, self.diff_class,
+                                        self.cluster_classes, self.categorical_features, self.feature_precisions,
+                                        self.distance_matrix, self.linkage_matrix, self.root_is_different, self.root_pred_classes)
+        return self.left
+
+    def get_right(self):
+        if self.right is None:
+            self.right = ExplanationNode(self.comparer, self.root_shap_values, self.cluster_node.get_right(), self, self.diff_class,
+                                         self.cluster_classes, self.categorical_features, self.feature_precisions,
+                                         self.distance_matrix, self.linkage_matrix, self.root_is_different, self.root_pred_classes)
+        return self.right
 
     def get_last_child_before_diff_class_split(self):
         if not self.diff_class in list(self.class_counts.keys()):
@@ -239,49 +294,25 @@ class ClusterNode(Explanation):
             return left.get_last_child_before_diff_class_split()
         return self
 
-    def get_parent(self, n=1):
-        if self.parent is None or n == 0:
-            return self
-        return self.parent.get_parent(n - 1)
-
-    def describe_feature(self, feature):
-        s = self.shap_values[:, feature]
-        if s.feature_names in self.categorical_features:
-            return pd.DataFrame([
-                    pd.Series(self.root_shap_values[:, feature].data).value_counts(),
-                    pd.Series(s.data).value_counts(),
-                    pd.Series(s[self.highlight].data).value_counts()
-                ], index=['global', 'local-all', 'local-diff'])
-        else:
-            return pd.DataFrame(index=['global', 'local-all', 'local-diff'], data=[
-                self.root_shap_values[:, feature].data,
-                s.data,
-                s[self.highlight].data]).T.describe()
-
-    def plot_feature(self, feature, classes=None, alpha=None, focus=None, color=None):
-        fill = None
-        if focus is not None:
-            fill = np.in1d(self.node.pre_order(), focus.node.pre_order())
-        counterfactuals = focus.counterfactuals if focus is not None else self.counterfactuals
-        return super(ClusterNode, self).plot_feature(feature, classes, alpha, color, fill, counterfactuals)
+    def plot_dendrogram(self):
+        fig, ax = plt.subplots(figsize=(7, 7))
+        hierarchy.dendrogram(self.linkage_matrix, orientation='right', ax=ax, no_labels=True)
+        ax.set_title('Dendrogram')
+        plt.show()
 
 
 def make_clustering(comparer, shap_values, diff_class=None, cluster_classes=None, categorical_features=None,
                     feature_precisions=None):
-    s = ensure_are_shap_values(shap_values)
     if cluster_classes is None:
-        cluster_classes = s.output_names
-    values = s[:, :, cluster_classes].values
+        cluster_classes = shap_values.output_names
+    values = shap_values[:, :, cluster_classes].values
     values = values.reshape((values.shape[0], values.shape[1] * values.shape[2]))
-    D = sp.spatial.distance.pdist(values, metric='sqeuclidean')
-    Z = sp.cluster.hierarchy.complete(D)
-    root = sp.cluster.hierarchy.to_tree(Z)
-    node = ClusterNode(comparer, shap_values, root, None, diff_class, cluster_classes, categorical_features, feature_precisions)
-    return node, Z
-
-
-def plot_dendrogram(Z):
-    fig, ax = plt.subplots(figsize=(7, 7))
-    sp.cluster.hierarchy.dendrogram(Z, orientation='right', ax=ax, no_labels=True)
-    ax.set_title('Dendrogram')
-    plt.show()
+    D = distance.pdist(values, metric='sqeuclidean')
+    Z = hierarchy.complete(D)
+    root = hierarchy.to_tree(Z)
+    is_different = comparer.predict_bin_diff(shap_values.data)
+    pred_classes = comparer.predict_mclass_diff(shap_values.data)
+    pred_classes = comparer.class_names[pred_classes]
+    node = ExplanationNode(comparer, shap_values, root, None, diff_class, cluster_classes, categorical_features,
+                           feature_precisions, D, Z, is_different, pred_classes)
+    return node

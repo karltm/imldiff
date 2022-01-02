@@ -4,224 +4,124 @@ from shap.maskers import Independent
 from shap.utils import hclust_ordering
 from shap.plots import colors
 import numpy as np
-import scipy as sp
 import pandas as pd
 import matplotlib.pyplot as plt
 import warnings
-from types import SimpleNamespace
 from comparers import ModelComparer
 from IPython.display import display
 from shap.utils import approximate_interactions
-import matplotlib.patches as patches
 
 
 def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display: np.ndarray = None,
-                               explanation_types: Iterable[str] = None, space_types: Iterable[str] = None,
-                               algorithm = 'auto', masker: shap.maskers.Masker = None):
+                               explanation_type='mclass_diff', space_type=None,
+                               algorithm='auto', masker: shap.maskers.Masker = None):
     """ Generate SHAP values for difference classifier
 
     :param comparer: model comparison helper
     :param X: dataset to generate SHAP values for
     :param X_display: dataset with same shape as X, which is used for plots
                       and may contain descriptive categorical values
-    :param explanation_types: list of types of explanations to generate
-                              'indiv' - individual models' SHAP values
-                              'indiv_diff' - difference between individual models' SHAP values
-                              'bin_diff' - SHAP values of binary difference classifier
-                              'mclass_diff' - SHAP values of multiclass difference classifier
-    :param space_types: list of types of spaces for which to generate SHAP values for
-                        'labels' - predicted labels (hard decision boundary)
-                        'proba' - predicted probabilities (soft decision boundary)
-                        'log_odds' - predicted log odds (soft decision boundary)
+    :param explanation_type:
+                'indiv' - individual models' SHAP values
+                'bin_diff' - SHAP values of binary difference classifier
+                'mclass_diff' - SHAP values of multiclass difference classifier
+    :param space_type:
+                'labels' - predicted labels (hard decision boundary)
+                'proba' - predicted probabilities (soft decision boundary)
+                'log_odds' - predicted log odds (soft decision boundary)
     :param algorithm: SHAP value generation algorithm. See shap.Explainer for possible values
-    :param masker: If you want to customize the masker used during SHAP value generation that masks out features.
-                   Default: shap.maskers.Independent(data=X)
-
-    :return tuple consisting of:
-            explanations - sliceable container of SHAP values for all requested kinds
-            indices_nonfinite_predictions - indices of predictions that were filtered because
-                                            of non-finite model predictions
-            explanations_nonfinite - SHAP values that were filtered because of non-finite SHAP values
-
-            the sliceable container contains in the first level the explanation types
-            and in the second level the space types and for individual explanations another level for each model.
-            To access the probability SHAP values of classifier A: explanations.indiv.proba.A
+    :param masker: Specify, if you want to customize the masker used during SHAP value generation
     """
-    if space_types is None:
-        space_types = ['labels', 'proba', 'log_odds']
-    if explanation_types is None:
-        explanation_types = ['indiv', 'indiv_diff', 'bin_diff', 'mclass_diff']
-    if 'indiv_diff' in explanation_types and not 'indiv' in explanation_types:
-        raise Exception('Cannot calculate shap value differences without the individual models\' shap values')
+    if space_type is None:
+        if comparer.has_log_odds_support:
+            space_type = 'log_odds'
+        elif comparer.has_probability_support:
+            space_type = 'proba'
+        else:
+            space_type = 'labels'
 
-    instance_names = np.arange(X.shape[0])
-    explainers = _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm, masker)
-    instance_names, X, X_display, indices_nonfinite_predictions = \
-        _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, X_display)
-    explanations = VariousTypeExplanationsNamespace()
-    _make_shap_values(explanations, X, X_display, explainers)
-    _derive_shap_values(explanations, comparer, explanation_types)
-    explanations, explanations_nonfinite = _filter_nonfinite_shap_values(explanations, instance_names)
-    return explanations, indices_nonfinite_predictions, explanations_nonfinite
+    predict_func, class_names = _get_predict_function_and_class_names(comparer, explanation_type, space_type)
 
+    instance_indices = np.arange(X.shape[0])
+    if space_type == 'log_odds':
+        # SHAP algorithm fails for infinite log odds predictions
+        y_pred = predict_func(X)
+        if len(y_pred.shape) == 1:
+            mask = np.isfinite(y_pred)
+        else:
+            mask = np.all(np.isfinite(y_pred), axis=1)
+        if np.sum(~mask) > 0:
+            warnings.warn(f'filtering instances with nonfinite predictions: {instance_indices[~mask]}')
+        instance_indices = instance_indices[mask]
 
-def _make_shap_explainers(explanation_types, space_types, comparer, X, algorithm, masker=None):
-    if masker is None:
-        masker = Independent(data=X)
-    feature_names = comparer.feature_names
+    explainer = shap.Explainer(predict_func, masker=masker, algorithm=algorithm,
+                               feature_names=comparer.feature_names, output_names=class_names)
+    shap_values = explainer(X[instance_indices])
+    if X_display is not None:
+        shap_values.display_data = X_display[instance_indices]
 
-    explainers = SimpleNamespace()
-    if 'indiv' in explanation_types:
-        ns = SimpleNamespace()
-        if 'labels' in space_types:
-            subns = SimpleNamespace()
-            for classifier_name, predict in comparer.predict_one_hot_functions.items():
-                explainer = _make_shap_explainer(predict, masker=masker, algorithm=algorithm,
-                                                 feature_names=feature_names, output_names=comparer.base_class_names)
-                subns.__dict__[classifier_name] = explainer
-            ns.labels = subns
-        if 'proba' in space_types:
-            subns = SimpleNamespace()
-            for classifier_name, predict in comparer.predict_proba_functions.items():
-                explainer = _make_shap_explainer(predict, masker=masker, algorithm=algorithm,
-                                                 feature_names=feature_names, output_names=comparer.base_class_names)
-                subns.__dict__[classifier_name] = explainer
-            ns.proba = subns
-        if 'log_odds' in space_types:
-            subns = SimpleNamespace()
-            for classifier_name, predict in comparer.predict_log_odds_functions.items():
-                explainer = _make_shap_explainer(predict, masker=masker, algorithm=algorithm,
-                                                 feature_names=feature_names, output_names=comparer.base_class_names)
-                subns.__dict__[classifier_name] = explainer
-            ns.log_odds = subns
-        explainers.indiv = ns
-    if 'bin_diff' in explanation_types:
-        ns = SimpleNamespace()
-        if 'labels' in space_types:
-            ns.labels = _make_shap_explainer(comparer.predict_bin_diff, masker=masker, output_names='diff',
-                                             algorithm=algorithm, feature_names=feature_names)
-        if 'proba' in space_types:
-            ns.proba = _make_shap_explainer(comparer.predict_bin_diff_proba, masker=masker, output_names='diff',
-                                            algorithm=algorithm, feature_names=feature_names)
-        if 'log_odds' in space_types:
-            ns.log_odds = _make_shap_explainer(comparer.predict_bin_diff_log_odds, masker=masker, output_names='diff',
-                                               algorithm=algorithm, feature_names=feature_names)
-        explainers.bin_diff = ns
-    if 'mclass_diff' in explanation_types:
-        ns = SimpleNamespace()
-        if 'labels' in space_types:
-            ns.labels = _make_shap_explainer(comparer.predict_mclass_diff_one_hot, masker=masker,
-                                             algorithm=algorithm, feature_names=feature_names,
-                                             output_names=comparer.class_names)
-        if 'proba' in space_types:
-            ns.proba = _make_shap_explainer(comparer.predict_mclass_diff_proba, masker=masker,
-                                            algorithm=algorithm, feature_names=feature_names,
-                                            output_names=comparer.class_names)
-        if 'log_odds' in space_types:
-            ns.log_odds = _make_shap_explainer(comparer.predict_mclass_diff_log_odds, masker=masker,
-                                               algorithm=algorithm, feature_names=feature_names,
-                                               output_names=comparer.class_names)
-        explainers.mclass_diff = ns
-    return explainers
+    # workaround for bug, where output_names aren't set in some cases
+    if shap_values.output_names is None:
+        shap_values = shap.Explanation(shap_values.values, shap_values.base_values, shap_values.data,
+                                       shap_values.display_data, shap_values.instance_names,
+                                       shap_values.feature_names, class_names)
 
+    if space_type == 'log_odds':
+        # Visualizations fail for non-finite SHAP values
+        if len(shap_values.shape) == 2:
+            mask = np.all(np.isfinite(shap_values.values), axis=1)
+        else:
+            mask = np.all(np.all(np.isfinite(shap_values.values), axis=2), axis=1)
+        if np.sum(~mask) > 0:
+            warnings.warn(f'filtering instances with non-finite SHAP values: {instance_indices[~mask]}')
+            shap_values = shap_values[mask]
 
-def _make_shap_explainer(predict, masker, algorithm, feature_names, output_names=None):
-    explainer = shap.Explainer(predict, masker=masker, algorithm=algorithm, feature_names=feature_names,
-                               output_names=output_names)
-
-    # workaround: not all shap explainers support output_names. so we remember them for later to recover them
-    if output_names is not None and explainer.output_names is None:
-        explainer.output_names_backup = output_names
-
-    return explainer
-
-
-def _filter_instances_with_nonfinite_predictions(explainers, instance_names, X, X_display=None):
-    filter_mask = np.repeat(True, X.shape[0])
-    for explanation_type, explainers_ns in explainers.__dict__.items():
-        for space_type, space_sub in explainers_ns.__dict__.items():
-            if isinstance(space_sub, shap.Explainer):
-                filter_mask &= _make_nonfinite_predictions_mask_for_explainer(space_sub, X)
-            elif isinstance(space_sub, SimpleNamespace):
-                for sub_type, explainer in space_sub.__dict__.items():
-                    filter_mask &= _make_nonfinite_predictions_mask_for_explainer(explainer, X)
-
-    if np.sum(~filter_mask) > 0:
-        warnings.warn(f'filtering instances with nonfinite predictions: {instance_names[~filter_mask]}')
-        instance_names = instance_names[filter_mask]
-        indices_nonfinite_predictions = instance_names[~filter_mask]
-        X = X[filter_mask, :]
-        if X_display is not None:
-            X_display = X_display[filter_mask, :]
-    else:
-        indices_nonfinite_predictions = np.array([])
-    return instance_names, X, X_display, indices_nonfinite_predictions
-
-
-def _make_nonfinite_predictions_mask_for_explainer(explainer, X):
-    y_pred = explainer.model(X)
-    if len(y_pred.shape) == 1:
-        mask = np.isfinite(y_pred)
-    else:
-        mask = np.all(np.isfinite(y_pred), axis=1)
-    return mask
-
-
-class BaseExplanationsNamespace(SimpleNamespace):
-    """ A sliceable, pickleable container for groups of SHAP values """
-
-    def __getitem__(self, *args, **kwargs):
-        return self.__class__(**dict([(k, v.__getitem__(*args, **kwargs)) for k, v in self.__dict__.items()]))
-
-    @property
-    def data(self):
-        return next(iter(self.__dict__.values())).data
-
-    @property
-    def display_data(self):
-        return next(iter(self.__dict__.values())).display_data
-
-    @property
-    def feature_names(self):
-        return next(iter(self.__dict__.values())).feature_names
-
-    @property
-    def merged(self):
-        return merge_explanations(**self.__dict__)
-
-    def cohorts(self, cohorts):
-        new_explanations = self.__class__()
-        for k, v in self.__dict__.items():
-            new_explanations.__dict__[k] = v.cohorts(cohorts)
-        return new_explanations
-
-
-def merge_explanations(**explanations):
-    names = []
-    values = []
-    base_values = []
-    for k, v in explanations.items():
-        if isinstance(v, BaseExplanationsNamespace):
-            v = v.merged
-        v = ensure_shap_values_are_3d(v)
-        names += [f'{k}.{name}' for name in v.output_names]
-        values.append(v.values)
-        base_values.append(v.base_values)
-    values = np.concatenate(values, axis=2)
-    base_values = np.concatenate(base_values, axis=1)
-    first = next(iter(explanations.values()))
-    return shap.Explanation(values, base_values, first.data, first.display_data,
-                            feature_names=first.feature_names, output_names=names)
-
-
-def ensure_are_shap_values(shap_values):
-    if isinstance(shap_values, BaseExplanationsNamespace):
-        return shap_values.merged
     return shap_values
 
 
+def _get_predict_function_and_class_names(comparer, explanation_type, space_type):
+    if explanation_type == 'indiv':
+        if space_type == 'labels':
+            predict_func = comparer.predict_combined_oh_encoded
+            class_names = comparer.combined_class_names
+        elif space_type == 'proba':
+            predict_func = comparer.predict_combined_proba
+            class_names = comparer.combined_class_names
+        elif space_type == 'log_odds':
+            predict_func = comparer.predict_combined_log_odds
+            class_names = comparer.combined_class_names
+        else:
+            raise Exception(f'Invalid space type: {space_type}')
+    elif explanation_type == 'bin_diff':
+        if space_type == 'labels':
+            predict_func = comparer.predict_bin_diff
+            class_names = comparer.bin_class_names[-1]
+        elif space_type == 'proba':
+            predict_func = comparer.predict_bin_diff_proba
+            class_names = comparer.bin_class_names[-1]
+        elif space_type == 'log_odds':
+            predict_func = comparer.predict_bin_diff_log_odds
+            class_names = comparer.bin_class_names[-1]
+        else:
+            raise Exception(f'Invalid space type: {space_type}')
+    elif explanation_type == 'mclass_diff':
+        if space_type == 'labels':
+            predict_func = comparer.predict_mclass_diff_oh_encoded
+            class_names = comparer.class_names
+        elif space_type == 'proba':
+            predict_func = comparer.predict_mclass_diff_proba
+            class_names = comparer.class_names
+        elif space_type == 'log_odds':
+            predict_func = comparer.predict_mclass_diff_log_odds
+            class_names = comparer.class_names
+        else:
+            raise Exception(f'Invalid space type: {space_type}')
+    else:
+        raise Exception(f'Invalid explanation type: {explanation_type}')
+    return predict_func, class_names
+
+
 def ensure_shap_values_are_3d(shap_values):
-    shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) == 3:
         return shap_values
     if isinstance(shap_values.feature_names, str):
@@ -238,95 +138,11 @@ def ensure_shap_values_are_3d(shap_values):
                             feature_names=feature_names, output_names=output_names)
 
 
-def ensure_all_shap_values_are_3d(*shap_values, **kw_shap_values):
-    if len(shap_values) > 0:
-        return tuple([ensure_shap_values_are_3d(s) for s in shap_values])
+def ensure_all_shap_values_are_3d(*shap_values_tuple, **kw_shap_values):
+    if len(shap_values_tuple) > 0:
+        return tuple([ensure_shap_values_are_3d(s) for s in shap_values_tuple])
     else:
         return dict([(k, ensure_shap_values_are_3d(s)) for k, s in kw_shap_values.items()])
-
-
-class SameTypeExplanationsNamespace(BaseExplanationsNamespace):
-
-    @property
-    def shape(self):
-        return next(iter(self.__dict__.values())).shape
-
-    @property
-    def output_names(self):
-        return next(iter(self.__dict__.values())).output_names
-
-
-class VariousTypeExplanationsNamespace(BaseExplanationsNamespace):
-
-    @property
-    def shape(self):
-        return next(iter(self.__dict__.values())).shape[:2]
-
-
-def _make_shap_values(explanations, X, X_display, explainers):
-    for explanation_type, explainers_ns in explainers.__dict__.items():
-        ns = SameTypeExplanationsNamespace()
-        for space_type, space_sub in explainers_ns.__dict__.items():
-            if isinstance(space_sub, shap.Explainer):
-                ns.__dict__[space_type] = _make_shap_values_for_explainer(X, X_display, space_sub)
-            elif isinstance(space_sub, SimpleNamespace):
-                subns = SameTypeExplanationsNamespace()
-                for sub_type, explainer in space_sub.__dict__.items():
-                    subns.__dict__[sub_type] = _make_shap_values_for_explainer(X, X_display, explainer)
-                ns.__dict__[space_type] = subns
-        explanations.__dict__[explanation_type] = ns
-
-
-def _make_shap_values_for_explainer(X, X_display, explainer):
-    shap_values = explainer(X)
-    if X_display is not None:
-        shap_values.display_data = X_display
-    # workaround: restore output_names for explainers that don't support them
-    if hasattr(explainer, 'output_names_backup'):
-        shap_values = shap.Explanation(shap_values.values, shap_values.base_values, shap_values.data,
-                                       shap_values.display_data, shap_values.instance_names,
-                                       shap_values.feature_names, explainer.output_names_backup)
-    return shap_values
-
-
-def _derive_shap_values(explanations, comparer, explanation_types):
-    if 'indiv_diff' in explanation_types:
-        ns = SameTypeExplanationsNamespace()
-        for space_type, space_sub in explanations.indiv.__dict__.items():
-            shap_values_a = space_sub.A
-            shap_values_b = space_sub.B
-            values = shap_values_a.values - shap_values_b.values
-            base_values = shap_values_a.base_values - shap_values_b.base_values
-            shap_values = shap.Explanation(values, base_values, explanations.data, explanations.display_data,
-                                           feature_names=explanations.feature_names,
-                                           output_names=comparer.base_class_names)
-            ns.__dict__[space_type] = shap_values
-        explanations.indiv_diff = ns
-
-
-def _filter_nonfinite_shap_values(explanations, instance_names):
-    filter_mask = np.repeat(True, explanations.shape[0])
-    for explanation_type, ns in explanations.__dict__.items():
-        for space_type, space_sub in ns.__dict__.items():
-            if isinstance(space_sub, shap.Explanation):
-                filter_mask &= _make_nonfinite_shap_values_mask(space_sub)
-            elif isinstance(space_sub, SimpleNamespace):
-                for sub_type, shap_values in space_sub.__dict__.items():
-                    filter_mask &= _make_nonfinite_shap_values_mask(shap_values)
-    if np.sum(~filter_mask) > 0:
-        warnings.warn(f'filtering instances with nonfinite shap values: {instance_names[~filter_mask]}')
-        explanations = explanations[filter_mask]
-        explanations_nonfinite = explanations[~filter_mask]
-    else:
-        explanations_nonfinite = explanations[np.repeat(False, explanations.shape[0])]
-    return explanations, explanations_nonfinite
-
-
-def _make_nonfinite_shap_values_mask(shap_values):
-    if len(shap_values.shape) == 2:
-        return np.all(np.isfinite(shap_values.values), axis=1)
-    else:
-        return np.all(np.all(np.isfinite(shap_values.values), axis=2), axis=1)
 
 
 def calc_feature_order(shap_values):
@@ -359,16 +175,25 @@ def calc_instance_order(shap_values):
     return instance_order
 
 
-def plot_2d(*shap_values, title=None, x=0, y=1, **kwargs):
-    shap_values = ensure_all_shap_values_are_3d(*shap_values)
-    ncols = sum([s.shape[2] for s in shap_values])
-    nrows = shap_values[0].shape[1]
+def estimate_feature_interaction_order(shap_values, feature):
+    if len(shap_values.shape) > 2:
+        raise Exception('only one target class supported')
+    feature_names = np.array(shap_values.feature_names)
+    if isinstance(feature, str):
+        feature = np.where(feature_names == feature)[0][0]
+    return approximate_interactions(feature, shap_values.values, shap_values.data)
+
+
+def plot_data_2d(*shap_values_tuple, title=None, x=0, y=1, **kwargs):
+    shap_values_tuple = ensure_all_shap_values_are_3d(*shap_values_tuple)
+    ncols = sum([s.shape[2] for s in shap_values_tuple])
+    nrows = shap_values_tuple[0].shape[1]
     fig, axs = plt.subplots(nrows, ncols, figsize=(9*ncols, 9*nrows), constrained_layout=True, sharex=True, sharey=True)
     plot_idx = 0
     fig.suptitle(title, fontsize=16)
     for feature_idx in range(nrows):
-        vmax = np.max([np.abs(s[:, feature_idx, :].values).flatten().max(0) for s in shap_values])
-        for s in shap_values:
+        vmax = np.max([np.abs(s[:, feature_idx, :].values).flatten().max(0) for s in shap_values_tuple])
+        for s in shap_values_tuple:
             display_shap_values = s[:, [x, y], :]
             X_display = _get_display_data(display_shap_values)
             for class_idx in range(s.shape[2]):
@@ -396,7 +221,6 @@ def _get_display_data(shap_values):
 
 
 def plot_feature_importance_bar(shap_values, title=None, feature_order=None):
-    shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) <= 2:
         return _plot_feature_importance_bar_singleclass(shap_values, title, feature_order)
     elif len(shap_values.shape) == 3:
@@ -425,7 +249,6 @@ def _plot_feature_importance_bar_multiclass(shap_values, title=None):
 
 
 def plot_feature_importance_scatter(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
-    shap_values = ensure_are_shap_values(shap_values)
     if shap_values.output_names is None or isinstance(shap_values.output_names, str):
         return _plot_feature_importance_scatter_singleclass(shap_values, title, feature_order, **kwargs)
     else:
@@ -467,38 +290,6 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         plt.show()
 
 
-def plot_feature_effects_per_class_per_feature(shap_values, feature, title=None, color=None, fill=None, alpha=None,
-                                               show=True, ax=None, jitter=False,
-                                               mark_x_upwards=None, mark_x_downwards=None):
-    if isinstance(feature, (int, np.integer)):
-        feature = shap_values.feature_names[feature]
-    s = shap_values[:, feature]
-    if ax is None:
-        _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
-    draw_steps, plot_colors, cmaps = _make_plot_colors(len(shap_values), fill, color)
-    sc = None
-    for draw_step in np.unique(draw_steps):
-        cmap = None if cmaps is None else cmaps[draw_step]
-        mask = draw_steps == draw_step
-        s_plot = s[mask]
-        current_plot_colors = plot_colors[mask]
-        sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha)
-    if mark_x_downwards is not None:
-        xlim = ax.get_xlim()
-        ax.axvspan(xlim[0], mark_x_downwards, color='grey', alpha=0.1)
-        ax.set_xlim(xlim)
-    if mark_x_upwards is not None:
-        xlim = ax.get_xlim()
-        ax.axvspan(mark_x_upwards, xlim[1], color='grey', alpha=0.1)
-        ax.set_xlim(xlim)
-    ax.set_title(title)
-    ax.set_xlabel(feature)
-    ax.set_ylabel('SHAP value of ' + feature)
-    if show:
-        plt.show()
-    return sc
-
-
 def _make_plot_colors(n_values, fill=None, color=None):
     if color is None:
         color = np.repeat(True, n_values)
@@ -535,9 +326,60 @@ def _make_continuous_plot_colors(n_values, fill=None, color=None):
     return draw_steps, plot_colors, cmaps
 
 
-def _rand_jitter(arr):
-    stdev = .01 * (max(arr) - min(arr))
-    return arr + np.random.randn(len(arr)) * stdev
+def plot_feature_dependencies(shap_values, color=None, fill=None, alpha=None, jitter=False):
+    shap_values = ensure_shap_values_are_3d(shap_values)
+    for feature in shap_values.feature_names:
+        plot_feature_dependencies_for_classes(shap_values, feature, color=color, fill=fill, alpha=alpha, show=False,
+                                              jitter=jitter)
+    plt.show()
+
+
+def plot_feature_dependencies_for_classes(shap_values, feature, color=None, color_label=None, fill=None, alpha=None,
+                                          show=True, jitter=False, mark_x_upwards=None, mark_x_downwards=None):
+    ncols = len(shap_values.output_names)
+    fig, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
+    sc = None
+    for class_name, ax in zip(shap_values.output_names, axs.flat):
+        sc = _plot_feature_dependence(shap_values[:, :, class_name], feature,
+                                      title=class_name, color=color, fill=fill, alpha=alpha, show=False,
+                                      ax=ax, jitter=jitter, mark_x_upwards=mark_x_upwards,
+                                      mark_x_downwards=mark_x_downwards)
+    if show:
+        if color_label is not None and sc is not None:
+            fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
+        plt.show()
+
+
+def _plot_feature_dependence(shap_values, feature, title=None, color=None, fill=None, alpha=None,
+                             show=True, ax=None, jitter=False,
+                             mark_x_upwards=None, mark_x_downwards=None):
+    if isinstance(feature, (int, np.integer)):
+        feature = shap_values.feature_names[feature]
+    s = shap_values[:, feature]
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+    draw_steps, plot_colors, cmaps = _make_plot_colors(len(shap_values), fill, color)
+    sc = None
+    for draw_step in np.unique(draw_steps):
+        cmap = None if cmaps is None else cmaps[draw_step]
+        mask = draw_steps == draw_step
+        s_plot = s[mask]
+        current_plot_colors = plot_colors[mask]
+        sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha)
+    if mark_x_downwards is not None:
+        xlim = ax.get_xlim()
+        ax.axvspan(xlim[0], mark_x_downwards, color='grey', alpha=0.1)
+        ax.set_xlim(xlim)
+    if mark_x_upwards is not None:
+        xlim = ax.get_xlim()
+        ax.axvspan(mark_x_upwards, xlim[1], color='grey', alpha=0.1)
+        ax.set_xlim(xlim)
+    ax.set_title(title)
+    ax.set_xlabel(feature)
+    ax.set_ylabel('SHAP value of ' + feature)
+    if show:
+        plt.show()
+    return sc
 
 
 def _scatter(x, y, ax=None, jitter=False, s=20, c='b', marker='o', cmap=None, norm=None, vmin=None, vmax=None, alpha=None, linewidths=None, verts=None, hold=None, **kwargs):
@@ -547,49 +389,16 @@ def _scatter(x, y, ax=None, jitter=False, s=20, c='b', marker='o', cmap=None, no
     else:
         func = plt.scatter
     if jitter:
-        x = _rand_jitter(x)
-        y = _rand_jitter(y)
+        if x.dtype == int or x.dtype == float:
+            x = _rand_jitter(x)
+        if y.dtype == int or y.dtype == float:
+            y = _rand_jitter(y)
     return func(x, y, s=s, c=c, marker=marker, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, alpha=alpha, linewidths=linewidths, **kwargs)
 
 
-def plot_feature_effects_per_feature(shap_values, feature, color=None, color_label=None, fill=None, alpha=None,
-                                     show=True, jitter=False, mark_x_upwards=None, mark_x_downwards=None):
-    ncols = len(shap_values.output_names)
-    fig, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
-    sc = None
-    for class_name, ax in zip(shap_values.output_names, axs.flat):
-        sc = plot_feature_effects_per_class_per_feature(shap_values[:, :, class_name], feature,
-                                                        title=class_name, color=color, fill=fill, alpha=alpha, show=False,
-                                                        ax=ax, jitter=jitter, mark_x_upwards=mark_x_upwards,
-                                                        mark_x_downwards=mark_x_downwards)
-    if show:
-        if color_label is not None and sc is not None:
-            fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
-        plt.show()
-
-
-def plot_feature_effects(shap_values, color=None, fill=None, alpha=None, jitter=False):
-    shap_values = ensure_shap_values_are_3d(shap_values)
-    for feature in shap_values.feature_names:
-        plot_feature_effects_per_feature(shap_values, feature, color=color, fill=fill, alpha=alpha, show=False,
-                                         jitter=jitter)
-    plt.show()
-
-
-def plot_feature_effects_comparison(color='#1E88E5', **kw_shap_values):
-    kw_shap_values = ensure_all_shap_values_are_3d(**kw_shap_values)
-    first_shap_values = next(iter(kw_shap_values.values()))
-    shape = first_shap_values.shape
-    nrows = shape[1] * shape[2]
-    ncols = len(kw_shap_values)
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='all', sharey='all', figsize=(9*ncols, 7*nrows))
-    it_axs = iter(axs.flat)
-    for feature in first_shap_values.feature_names:
-        for class_ in first_shap_values.output_names:
-            for title, shap_values in kw_shap_values.items():
-                shap.plots.scatter(shap_values[:, feature, class_], title=f'{title} {class_}', ax=next(it_axs),
-                                   color=color, show=False)
-    plt.show()
+def _rand_jitter(arr):
+    stdev = .01 * (max(arr) - min(arr))
+    return arr + np.random.randn(len(arr)) * stdev
 
 
 def plot_forces(shap_values, title=None, instance_order=None, class_order=None, **kwargs):
@@ -598,15 +407,14 @@ def plot_forces(shap_values, title=None, instance_order=None, class_order=None, 
     Further keyword arguments are passed to shap plot function
     e.g. link='logit'
     """
-    shap_values = ensure_are_shap_values(shap_values)
     if len(shap_values.shape) <= 2:
-        return plot_forces_singleclass(shap_values, title, instance_order, **kwargs)
+        return _plot_forces_singleclass(shap_values, title, instance_order, **kwargs)
     if len(shap_values.shape) == 3:
-        return plot_forces_multiclass(shap_values, instance_order, class_order, **kwargs)
+        return _plot_forces_multiclass(shap_values, instance_order, class_order, **kwargs)
     raise Exception(f'invalid dimensions: {shap_values.shape}')
 
 
-def plot_forces_singleclass(shap_values, title=None, instance_order=None, **kwargs):
+def _plot_forces_singleclass(shap_values, title=None, instance_order=None, **kwargs):
     if instance_order is not None and isinstance(instance_order, np.ndarray):
         instance_order = instance_order.tolist()
     X_display = _get_display_data(shap_values)
@@ -621,7 +429,7 @@ def plot_forces_singleclass(shap_values, title=None, instance_order=None, **kwar
     display(plot)
 
 
-def plot_forces_multiclass(shap_values, instance_order=None, class_order=None, **kwargs):
+def _plot_forces_multiclass(shap_values, instance_order=None, class_order=None, **kwargs):
     if class_order is None:
         class_order = range(shap_values.shape[2])
     if instance_order is not None and isinstance(instance_order, np.ndarray):
@@ -640,78 +448,18 @@ def plot_forces_multiclass(shap_values, instance_order=None, class_order=None, *
         display(plot)
 
 
-def plot_decision(shap_values, classes=None, **kwargs):
-    shap_values = ensure_are_shap_values(shap_values)
+def plot_decisions(shap_values, classes=None, **kwargs):
     if len(shap_values.shape) == 2:
-        plot_decision_singleclass(shap_values, **kwargs)
+        _plot_decision_singleclass(shap_values, **kwargs)
     elif len(shap_values.shape) == 3:
         if classes is None:
             classes = shap_values.output_names
         for class_ in classes:
-            plot_decision_singleclass(shap_values[:, :, class_], **kwargs)
+            _plot_decision_singleclass(shap_values[:, :, class_], **kwargs)
     else:
         raise Exception(f'invalid dimensions: {shap_values.shape}')
 
 
-def plot_decision_singleclass(shap_values, **kwargs):
+def _plot_decision_singleclass(shap_values, **kwargs):
     plt.title(shap_values.output_names)
     shap.decision_plot(shap_values.base_values[0], shap_values.values, shap_values.feature_names, **kwargs)
-
-
-def perform_hierarchical_clustering(shap_values):
-    shap_values = ensure_shap_values_are_3d(shap_values)
-    values = shap_values.values.reshape(
-        (shap_values.values.shape[0],
-         shap_values.values.shape[1] * shap_values.values.shape[2]))
-    D = sp.spatial.distance.pdist(values, metric='sqeuclidean')
-    linkage_matrix = sp.cluster.hierarchy.complete(D)
-    return linkage_matrix
-
-
-def plot_dendrogram(linkage_matrix):
-    fig, ax = plt.subplots(figsize=(7, 7))
-    sp.cluster.hierarchy.dendrogram(linkage_matrix, orientation='right', ax=ax, no_labels=True)
-    ax.set_title('Dendrogram')
-    plt.show()
-
-
-def extract_clustering(linkage_matrix, n_clusters):
-    cluster_names = np.array([f'c{idx}' for idx in range(1, n_clusters+1)])
-    clustering = sp.cluster.hierarchy.fcluster(linkage_matrix, t=n_clusters, criterion='maxclust')
-    clustering -= 1
-    return clustering, cluster_names
-
-
-def get_class_occurences_in_clusters(explanations_clustered, cluster_names, comparer):
-    occurences = pd.DataFrame(np.zeros((len(cluster_names), comparer.classes.shape[0]), dtype=int),
-                              index=cluster_names, columns=comparer.class_names)
-    for cluster, data in explanations_clustered.data.cohorts.items():
-        mclass_diff_ = comparer.predict_mclass_diff(data)
-        indices, counts = np.unique(mclass_diff_, return_counts=True)
-        occurences.loc[cluster, :].iloc[indices] = counts
-    has_diff_classes = occurences.loc[:, comparer.difference_class_names].sum(1) > 0
-    clusters_of_interest = occurences.index[has_diff_classes].to_numpy()
-    return occurences, clusters_of_interest
-
-
-def plot_feature_influence_comparison(shap_values, instances_mask, feature_order=None, class_order=None):
-    shap_values = ensure_shap_values_are_3d(shap_values)
-    shap_values = shap_values[:, feature_order][:, :, class_order]
-    confused_values = shap_values[instances_mask, :, :].mean(0).values
-    if np.sum(~instances_mask) > 0:
-        not_confused_values = shap_values[~instances_mask, :, :].mean(0).values
-    else:
-        not_confused_values = np.zeros(confused_values.shape)
-    for feature_name, cv, ncv in zip(shap_values.feature_names, confused_values, not_confused_values):
-        df = pd.DataFrame([cv, ncv], columns=shap_values.output_names, index=['confused', 'not confused'])
-        df.plot.bar(title=feature_name, ylabel='mean(SHAP value)')
-
-
-def estimate_feature_interaction_order(shap_values, feature):
-    if len(shap_values.shape) > 2:
-        raise Exception('only one target class supported')
-    feature_names = np.array(shap_values.feature_names)
-    if isinstance(feature, str):
-        feature = np.where(feature_names == feature)[0][0]
-    return approximate_interactions(feature, shap_values.values, shap_values.data)
-

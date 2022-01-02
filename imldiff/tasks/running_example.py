@@ -40,23 +40,6 @@ def make_task():
     blackbox2 = DecisionTreeClassifier(random_state=1)
     blackbox2.fit(X2_train, y2_train)
 
-    feature1 = []
-    feature2 = []
-    for x in X1:
-        feature1.append(x[0])
-        feature2.append(x[1])
-
-    for x in X2:
-        feature1.append(x[0])
-        feature2.append(x[1])
-
-    feature1 = np.asarray(feature1)
-    feature2 = np.asarray(feature2)
-
-    y = np.concatenate((y1, y2))
-
-    X = np.vstack([feature1, feature2]).T
-
     feature_names = np.array(['x1', 'x2'])
 
-    return blackbox1, blackbox2, X, y, feature_names
+    return blackbox1, blackbox2, X1, y1, feature_names

@@ -178,6 +178,15 @@ class ModelComparer:
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
 
+    def check_feature(self, feature):
+        if isinstance(feature, str):
+            feature_idx = np.where(self.feature_names == feature)[0][0]
+            feature_name = feature
+        else:
+            feature_idx = feature
+            feature_name = self.feature_names[feature_idx]
+        return feature_idx, feature_name
+
     def plot_decision_boundaries(self, X, X_display=None, kind='label', separate=False, idx_x=0, idx_y=1,
                                  xlim=None, ylim=None, zlim=None, **kwargs):
         if kind == 'label':
@@ -252,9 +261,8 @@ class ModelComparer:
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.base_classes)
         fig, ax = plt.subplots(constrained_layout=True)
         disp.plot(ax=ax)
-        ax.set_title('Confusion matrix of predicted labels of $c_A$ vs. $c_B$')
-        ax.set_ylabel('$\hat{y}_A$')
-        ax.set_xlabel('$\hat{y}_B$')
+        ax.set_ylabel('predictions of A')
+        ax.set_xlabel('predictions of B')
         plt.show()
 
 

@@ -16,7 +16,7 @@ def _remove_occurences(l, s):
 
 def print_rules(tree, feature_names, class_names, focus_class=None, feature_order=None, precision=0, X_test=None, y_test=None):
     """Adapted from: https://mljar.com/blog/extract-rules-decision-tree/"""
-    class_names = class_names[tree.classes_]
+    class_names = class_names[tree.classes_.astype(int)]
 
     if feature_order is None:
         feature_order = np.arange(len(feature_names))
@@ -63,29 +63,32 @@ def print_rules(tree, feature_names, class_names, focus_class=None, feature_orde
     paths = [paths[i] for i in reversed(ii)]
 
     constraints = []
+    n_total_terms = 0
     for path in paths:
         node_id = path[-1][2]
         rule = f"node #{node_id}: if "
 
         constraint = ''
+        n_terms = 0
         for p in path[:-1]:
             if constraint != '':
                 constraint += " and "
             constraint += str(p)
+            n_terms += 1
         rule += constraint + " then "
-        if class_names is None:
-            rule += "response: "+str(np.round(path[-1][0][0][0],3))
-        else:
-            classes = path[-1][0][0]
-            current_class_idx = np.argmax(classes)
-            if focus_class is not None and focus_class != class_names[current_class_idx]:
-                continue
-            share = round(classes[current_class_idx]/sum(classes), 3)
-            n_instances = int(classes.sum())
-            rule += f"class {class_names[current_class_idx]} (covers {share} of {n_instances} instances)"
+        classes = path[-1][0][0]
+        current_class_idx = np.argmax(classes)
+        if focus_class is not None and focus_class != class_names[current_class_idx]:
+            continue
+        share = round(classes[current_class_idx]/sum(classes), 3)
+        n_instances = int(classes.sum())
+        rule += f"class {class_names[current_class_idx]} (covers {share} of {n_instances} instances)"
         print(rule)
         constraints.append(constraint)
-
+        n_total_terms += n_terms
+    if len(constraints) > 0:
+        print(f'number of rules: {len(constraints)}')
+        print(f'number of terms: {n_total_terms} ({round(n_total_terms/len(constraints), 1)} avg. per rule)')
     return constraints
 
 

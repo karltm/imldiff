@@ -5,6 +5,9 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 import numpy as np
 
+feature_names = np.array(['x1', 'x2'])
+feature_precisions = [1, 1]
+
 
 def make_task():
     X1, y1 = make_classification(n_samples=300, n_features=2,
@@ -40,6 +43,4 @@ def make_task():
     blackbox2 = DecisionTreeClassifier(random_state=1)
     blackbox2.fit(X2_train, y2_train)
 
-    feature_names = np.array(['x1', 'x2'])
-
-    return blackbox1, blackbox2, X1, y1, feature_names
+    return blackbox1, blackbox2, X1, y1, feature_names, feature_precisions

@@ -6,22 +6,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from IPython.display import display
 from explainers import plot_feature_dependencies_for_classes, calc_feature_order
-from util import index_of
-
-
-class Counterfactual:
-    def __init__(self, feature, value, is_direction_up, outcomes):
-        self.feature = feature
-        self.value = value
-        self.is_direction_up = is_direction_up
-        self.outcomes = outcomes
-
-    def is_including_class(self, class_):
-        return class_ in self.outcomes.keys()
-
-    def __repr__(self):
-        sign = '>=' if self.is_direction_up else '<='
-        return f'{self.feature} {sign} {self.value} --> {self.outcomes}'
+from util import RuleClassifier, constraint_matrix_to_rules, get_index_and_name, find_counterfactuals, \
+    counterfactuals_to_constraint_matrix
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
 
 class Explanation:
@@ -55,8 +43,7 @@ class Explanation:
 
     @property
     def features_with_counterfactuals(self):
-        mask = np.isin(self.features_ordered, list(self.counterfactuals.keys()))
-        return self.features_ordered[mask]
+        return np.array([feature for feature in self.features_ordered if len(self.counterfactuals[feature]) > 0])
 
     @property
     def features_without_counterfactuals(self):
@@ -69,52 +56,9 @@ class Explanation:
         self.counterfactuals = {}
         if np.sum(self.highlight) == 0 or self.diff_class is None:
             return
-        for feature_idx, feature in enumerate(self.shap_values.feature_names):
-            cf_up = self._find_upper_counterfactual(feature)
-            cf_down = self._find_lower_counterfactual(feature)
-            if cf_up.is_including_class(self.diff_class):
-                cf_up = None
-            if cf_down.is_including_class(self.diff_class):
-                cf_down = None
-            if cf_down is not None or cf_up is not None:
-                self.counterfactuals[feature] = (cf_down, cf_up)
-
-    def _find_upper_counterfactual(self, feature):
-        return self._find_counterfactual(feature, upwards=True)
-
-    def _find_lower_counterfactual(self, feature):
-        return self._find_counterfactual(feature, upwards=False)
-
-    def _find_counterfactual(self, feature, upwards):
-        feature_idx, feature_name = self.comparer.check_feature(feature)
-        diff_class_idx = np.where(self.comparer.class_names == self.diff_class)[0][0]
-        X_mod = self.data[self.highlight, :].copy()
-        precision = self.feature_precisions[feature_idx]
-        if upwards:
-            sign = 1
-            start = round(self.data[self.highlight, feature_idx].max(), precision)
-            limit = self.root.data[:, feature_idx].max()
-        else:
-            sign = -1
-            start = round(self.data[self.highlight, feature_idx].min(), precision)
-            limit = self.root.data[:, feature_idx].min()
-        step = sign * 10 ** -precision
-        y_mod = None
-        for value in np.arange(start, limit + step, step):
-            X_mod[:, feature_idx] = round(value, precision)
-            y_mod = self.comparer.predict_mclass_diff(X_mod)
-            if np.all(y_mod != diff_class_idx):
-                break
-        class_counts = dict(pd.Series(self.comparer.class_names[y_mod]).value_counts())
-        return Counterfactual(feature_name, value=X_mod[0, feature_idx], is_direction_up=upwards, outcomes=class_counts)
-
-    def describe_counterfactuals(self, feature):
-        _, feature_name = self.comparer.check_feature(feature)
-        cf_down, cf_up = self.counterfactuals.get(feature_name, (None, None))
-        if cf_down is not None:
-            print(cf_down)
-        if cf_up is not None:
-            print(cf_up)
+        self.counterfactuals = find_counterfactuals(self.comparer, self.data[self.highlight], self.root.data,
+                                                    self.feature_precisions,
+                                                    list(self.comparer.class_names).index(self.diff_class))
 
     def describe_feature_differences(self, feature):
         feature_idx, feature_name = self.comparer.check_feature(feature)
@@ -154,22 +98,17 @@ class Explanation:
             color = self.data[:, color_feature_idx]
         jitter = feature_name in self.categorical_features
         s = self.shap_values[:, :, classes]
-        mark_x_downwards = None
-        mark_x_upwards = None
+        vlines = []
         if feature_name in counterfactuals:
-            cf_down, cf_up = counterfactuals[feature_name]
-            if cf_down is not None:
-                mark_x_downwards = cf_down.value
-            if cf_up is not None:
-                mark_x_upwards = cf_up.value
+            for cf in counterfactuals[feature_name]:
+                vlines.append(cf.value)
         plot_feature_dependencies_for_classes(s, feature, color=color, color_label=color_feature_name, fill=fill,
-                                              alpha=alpha, jitter=jitter,
-                                              mark_x_upwards=mark_x_upwards, mark_x_downwards=mark_x_downwards)
+                                              alpha=alpha, jitter=jitter, vlines=vlines)
 
     def plot_outcome_differences(self):
-        diff_class_idx = index_of(self.comparer.class_names, self.diff_class)
+        diff_class_idx = list(self.comparer.class_names).index(self.diff_class)
         other_classes = [class_ for class_ in self.cluster_classes if class_ != self.diff_class]
-        other_class_indices = [index_of(self.comparer.class_names, class_) for class_ in other_classes]
+        other_class_indices = [list(self.comparer.class_names).index(class_) for class_ in other_classes]
         s = self.shap_values
         log_odds_per_class = s.base_values + s.values.sum(1)
         log_odds_of_diff_class = log_odds_per_class[:, diff_class_idx]
@@ -209,6 +148,33 @@ class Explanation:
                 feature_data,
                 feature_data[self.highlight]]).T.describe()
 
+    def rule_from_counterfactuals(self, *include_features):
+        if len(include_features) == 0:
+            include_features = self.features_with_counterfactuals
+        constraint = self.constraint_matrix_from_counterfactuals(*include_features)
+        rules = constraint_matrix_to_rules([constraint], self.comparer.feature_names, self.feature_order)
+        instance_indices = self.instance_indices[self.highlight]
+        return rules[0], constraint, instance_indices
+
+    def constraint_matrix_from_counterfactuals(self, *include_features):
+        if len(include_features) == 0:
+            include_features = self.features_with_counterfactuals
+        return counterfactuals_to_constraint_matrix(self.comparer.feature_names, self.feature_precisions,
+                                                    include_features, self.counterfactuals)
+
+    def evaluate_rules(self, *rules):
+        r = RuleClassifier(self.comparer.feature_names, rules)
+        y_diffclf = self.highlight
+        y_expl = r.predict(self.data)
+        print(classification_report(y_diffclf, y_expl))
+        #cm = confusion_matrix(y_diffclf, y_expl, labels=[False, True])
+        #disp = ConfusionMatrixDisplay(confusion_matrix=cm)
+        #fig, ax = plt.subplots(constrained_layout=True)
+        #disp.plot(ax=ax)
+        #ax.set_ylabel('difference classifier predictions')
+        #ax.set_xlabel('explanation\'s predictions')
+        #plt.show()
+
 
 class ExplanationNode(Explanation):
     def __init__(self, comparer, orig_shap_values, cluster_node, instance_indices, cluster_classes, orig_pred_classes,
@@ -220,8 +186,18 @@ class ExplanationNode(Explanation):
         self.cluster_node = cluster_node
         self.distance_matrix = distance_matrix
         self.linkage_matrix = linkage_matrix
-        self.left = None
-        self.right = None
+        self.left = self._make_child(self.cluster_node.get_left())
+        self.right = self._make_child(self.cluster_node.get_right())
+
+    def _make_child(self, cluster_node):
+        if self.distance == 0.0:
+            return None
+        if cluster_node is None:
+            return None
+        instance_indices = np.array(cluster_node.pre_order())
+        return ExplanationNode(self.comparer, self.orig_shap_values, cluster_node, instance_indices, self.cluster_classes,
+                               self.orig_pred_classes, self.distance_matrix, self.linkage_matrix, self.categorical_features,
+                               self.feature_precisions, self.orig_highlight, self.diff_class, self)
 
     @property
     def distance(self):
@@ -250,19 +226,9 @@ class ExplanationNode(Explanation):
             return self
 
     def get_left(self):
-        if self.left is None:
-            self.left = self._make_child(self.cluster_node.get_left())
         return self.left
 
-    def _make_child(self, cluster_node):
-        instance_indices = np.array(cluster_node.pre_order())
-        return ExplanationNode(self.comparer, self.orig_shap_values, cluster_node, instance_indices, self.cluster_classes,
-                               self.orig_pred_classes, self.distance_matrix, self.linkage_matrix, self.categorical_features,
-                               self.feature_precisions, self.orig_highlight, self.diff_class, self)
-
     def get_right(self):
-        if self.right is None:
-            self.right = self._make_child(self.cluster_node.get_right())
         return self.right
 
     def get_last_child_before_diff_class_split(self):
@@ -272,9 +238,9 @@ class ExplanationNode(Explanation):
             return self
         left = self.get_left()
         right = self.get_right()
-        if not self.diff_class in list(left.class_counts.keys()):
+        if right is not None and not self.diff_class in list(left.class_counts.keys()):
             return right.get_last_child_before_diff_class_split()
-        if not self.diff_class in list(right.class_counts.keys()):
+        if right is not None and not self.diff_class in list(right.class_counts.keys()):
             return left.get_last_child_before_diff_class_split()
         return self
 

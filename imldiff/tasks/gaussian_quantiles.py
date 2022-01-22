@@ -3,6 +3,9 @@ import pandas as pd
 from sklearn import svm
 from sklearn.datasets import make_gaussian_quantiles
 
+feature_names = np.array(['x1', 'x2'])
+feature_precisions = [1, 1]
+
 
 def make_task():
     """
@@ -26,6 +29,4 @@ def make_task():
     X = np.concatenate((X1, X2))
     y = np.concatenate((y1, y2))
 
-    feature_names = np.array(['x1', 'x2'])
-
-    return blackbox1, blackbox2, X, y, feature_names
+    return blackbox1, blackbox2, X, y, feature_names, feature_precisions

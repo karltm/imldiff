@@ -335,15 +335,14 @@ def plot_feature_dependencies(shap_values, color=None, fill=None, alpha=None, ji
 
 
 def plot_feature_dependencies_for_classes(shap_values, feature, color=None, color_label=None, fill=None, alpha=None,
-                                          show=True, jitter=False, mark_x_upwards=None, mark_x_downwards=None):
+                                          show=True, jitter=False, vlines=None):
     ncols = len(shap_values.output_names)
     fig, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
     sc = None
     for class_name, ax in zip(shap_values.output_names, axs.flat):
         sc = _plot_feature_dependence(shap_values[:, :, class_name], feature,
                                       title=class_name, color=color, fill=fill, alpha=alpha, show=False,
-                                      ax=ax, jitter=jitter, mark_x_upwards=mark_x_upwards,
-                                      mark_x_downwards=mark_x_downwards)
+                                      ax=ax, jitter=jitter, vlines=vlines)
     if show:
         if color_label is not None and sc is not None:
             fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
@@ -352,7 +351,7 @@ def plot_feature_dependencies_for_classes(shap_values, feature, color=None, colo
 
 def _plot_feature_dependence(shap_values, feature, title=None, color=None, fill=None, alpha=None,
                              show=True, ax=None, jitter=False,
-                             mark_x_upwards=None, mark_x_downwards=None):
+                             vlines=None):
     if isinstance(feature, (int, np.integer)):
         feature = shap_values.feature_names[feature]
     s = shap_values[:, feature]
@@ -366,14 +365,9 @@ def _plot_feature_dependence(shap_values, feature, title=None, color=None, fill=
         s_plot = s[mask]
         current_plot_colors = plot_colors[mask]
         sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha)
-    if mark_x_downwards is not None:
-        xlim = ax.get_xlim()
-        ax.axvspan(xlim[0], mark_x_downwards, color='grey', alpha=0.1)
-        ax.set_xlim(xlim)
-    if mark_x_upwards is not None:
-        xlim = ax.get_xlim()
-        ax.axvspan(mark_x_upwards, xlim[1], color='grey', alpha=0.1)
-        ax.set_xlim(xlim)
+    if vlines is not None:
+        for x in vlines:
+            ax.axvline(x, alpha=0.6, linewidth=1, color='black', linestyle='--')
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)
@@ -463,3 +457,8 @@ def plot_decisions(shap_values, classes=None, **kwargs):
 def _plot_decision_singleclass(shap_values, **kwargs):
     plt.title(shap_values.output_names)
     shap.decision_plot(shap_values.base_values[0], shap_values.values, shap_values.feature_names, **kwargs)
+
+
+def print_rules(rules):
+    for idx, rule in enumerate(rules, 1):
+        print(f'{idx}. {rule}')

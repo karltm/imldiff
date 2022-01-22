@@ -16,49 +16,73 @@ race_idx = 6
 
 country_us_value = 0
 
+hyper_parameters = {'nestimators': 100, 'max_depth': 2}
+feature_names = np.array(['Age', 'Workclass', 'Education-Num', 'Marital Status',
+                          'Occupation', 'Relationship', 'Race', 'Sex', 'Capital Gain',
+                          'Capital Loss', 'Hours per week', 'Country'])
+categorical_features = ['Workclass', 'Education-Num', 'Marital Status', 'Occupation',
+                        'Relationship', 'Race', 'Sex', 'Country']
+feature_precisions = [0 for _ in feature_names]
+
 
 def apply_influential_modification(X):
     X[:, hours_per_week_idx] -= 2
-    rng = np.random.default_rng(0)
-    noise = rng.integers(low=X[:, race_idx].min(), high=X[:, race_idx].max(), size=len(X))
-    X[:, race_idx] = noise
     return X
 
 
-def apply_uninfluential_modification(X):
-    rng = np.random.default_rng(1)
-    noise = rng.integers(low=X[:, race_idx].min(), high=X[:, race_idx].max(), size=len(X))
-    X[:, race_idx] = noise
+def apply_uninfluential_modification(X, seed):
+    rng = np.random.default_rng(seed)
+    noise = rng.integers(low=0, high=2, size=len(X))
+    X[:, capital_loss_idx] += noise
     return X
 
 
-def make_task_with_influential_modification():
-    return _make_task(apply_influential_modification)
-
-
-def _make_task(modify):
+def make_task_without_modifications():
     X, y = shap.datasets.adult()
-    feature_names = np.array(X.columns)
     X = X.values
     X_display = shap.datasets.adult(display=True)[0].values
     X_train, X_test, X_display_train, X_display_test, y_train, y_test = \
         train_test_split(X, X_display, y, train_size=0.97, stratify=y, random_state=52)
 
-    rng = np.random.default_rng(0)
-    noise = rng.integers(low=X[:, race_idx].min(), high=X[:, race_idx].max(), size=len(X_train))
-    X_train[:, race_idx] = noise
+    clf = XGBClassifierWithLogProbaPredict(**hyper_parameters)
+    clf.fit(X_train, y_train)
 
-    clf_a = XGBClassifierWithLogProbaPredict(nestimators=100, max_depth=1)
+    return clf, X_test, X_display_test, y_test, feature_names, categorical_features, feature_precisions
+
+
+def make_task_without_noise():
+    X, y = shap.datasets.adult()
+    X = X.values
+    X_display = shap.datasets.adult(display=True)[0].values
+    X_train, X_test, X_display_train, X_display_test, y_train, y_test = \
+        train_test_split(X, X_display, y, train_size=0.97, stratify=y, random_state=52)
+
+    clf_a = XGBClassifierWithLogProbaPredict(**hyper_parameters)
     clf_a.fit(X_train, y_train)
 
     X_train2 = X_train.copy()
-    X_train2 = modify(X_train2)
-    clf_b = XGBClassifierWithLogProbaPredict(nestimators=100, max_depth=1)
+    X_train2 = apply_influential_modification(X_train2)
+    clf_b = XGBClassifierWithLogProbaPredict(**hyper_parameters)
     clf_b.fit(X_train2, y_train)
 
-    return clf_a, clf_b, X_test, X_display_test, y_test, feature_names
+    return clf_a, clf_b, X_test, X_display_test, y_test, feature_names, categorical_features, feature_precisions
 
 
-def make_task_with_influential_and_uninfluential_modification():
-    return _make_task(lambda X: apply_uninfluential_modification(apply_influential_modification(X)))
+def make_task_with_noise(seed=43):
+    X, y = shap.datasets.adult()
+    X = X.values
+    X_display = shap.datasets.adult(display=True)[0].values
+    X = apply_uninfluential_modification(X, seed)
+    X_display = apply_uninfluential_modification(X_display, seed)
+    X_train, X_test, X_display_train, X_display_test, y_train, y_test = \
+        train_test_split(X, X_display, y, train_size=0.97, stratify=y, random_state=52)
 
+    clf_a = XGBClassifierWithLogProbaPredict(**hyper_parameters)
+    clf_a.fit(X_train, y_train)
+
+    X_train2 = X_train.copy()
+    X_train2 = apply_influential_modification(X_train2)
+    clf_b = XGBClassifierWithLogProbaPredict(**hyper_parameters)
+    clf_b.fit(X_train2, y_train)
+
+    return clf_a, clf_b, X_test, X_display_test, y_test, feature_names, categorical_features, feature_precisions

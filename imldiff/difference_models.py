@@ -8,7 +8,7 @@ from scipy.special import logsumexp
 class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
     """
     Classifier that classifies whether the passed base classifiers
-    predict the same class (False) or a different class (True)
+    predict a different class label (True) or same class label (False)
     """
    
     def  __init__(self, clf_a, clf_b):
@@ -25,7 +25,9 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         """
-        Predict class labels, output shape is (n,)
+        Predict class labels
+        :param X: input data in array of shape (n, p)
+        :return:  predictions in array of shape (n, )
         """
         X = check_array(X)
         pred_a = self.clf_a.predict(X)
@@ -34,7 +36,9 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         """
-        Predict probabilities for the two classes, the output shape is (n, 2)
+        Predict probabilities for the two class labels
+        :param X: input data in array of shape (n, p)
+        :return: predictions in array of shape (n, 2)
         """
         if not len(self.clf_a.classes_) == 2:
             raise Exception('Probability estimates are undefined for multiclass classification problems')
@@ -46,8 +50,8 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_log_proba(self, X):
         """
-        Predict log-probabilities instead of probabilities for the two classes,
-        the output shape is (n, 2)
+        Predict log-transformed probabilities for the two class labels
+        :return: predictions in array of shape (n, 2)
         """
         if not len(self.clf_a.classes_) == 2:
             raise Exception('Probability estimates are undefined for multiclass classification problems')
@@ -64,38 +68,40 @@ def complement_log_proba(log_proba):
 
 class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
     """
-    Reformulates the classification problem to classify into m^2 difference classes,
-    m being the number of base classes in the base classification problem.
+    Reformulates the classification problem to classify into q^2 difference classes,
+    q being the number of base classes in the base classification problem.
     
-    They can be visualized in a m x m matrix with the corresponding class labels l_1, l_2, ... l_m,
+    They can be visualized in a qxq matrix with the corresponding class labels 0, 1, ... q^2
     where the diagonal contains classes where the base classifiers predict equal classes:
-    clf_b(x) = l_1     l_2     ...     l_m
-    clf_a(x) = ---------------------------
-      l_1    |  0       1      ...      m
-      l_2    | m+1     m+2     ...     2*m
+    clf_b(x) = 0        1        ...     q
+    clf_a(x)
+      =      ---------------------------
+      0      |  0       1        ...     q
+      1      | q+1      q+2      ...     2q
       ...    |
-      l_m    | m^2-m  m^2-m+1  ...     m^2
+      q      | q^2-q    q^2-q+1  ...     q^2
       
     For binary base classification problems this results in a 4-class difference classifier:
-    clf_b(x) = False True
-    clf_a(x) = ----------
-      False  |  0     1
-      True   |  2     3
+    clf_b(x) =  0   1
+    clf_a(x)
+      =      ----------
+      0      |  0   1
+      1      |  2   3
       
     And for 3-class base classification problems this results in a 9-class difference classifier:
-    clf_b(x) = l_1 l_2 l_3
-    clf_a(x) = -----------
-      l_1    |  0   1   2
-      l_2    |  3   4   5
-      l_3    |  6   7   8
+    clf_b(x) = 0   1   2
+    clf_a(x)
+       =     -----------
+       0    |  0   1   2
+       1    |  3   4   5
+       2    |  6   7   8
 
-    After fitting, the following variables are available:
-    - `base_classes_`: numpy array of the base classes [l_1, l_2, ... l_m]
-    - `classes_`: numpy array of the equality and difference classes [0, 1, ... (m-1)^2]
-    - `equality_classes_`: numpy array of the equality classes,
-                           the diagonal elements of `classes_`, if reshaped as a m x m matrix
+    The following variables are available:
+    - `base_classes_`: numpy array of the individual classifiers' classes [0, 1, ... q]
+    - `classes_`: numpy array of the difference classifier classes [0, 1, ... (q-1)^2]
+    - `equality_classes_`: numpy array of the equality classes
     - `difference_classes_`: numpy array of the difference classes
-    - `class_tuples_: numpy array of difference class tuples [(l_1, l_1), (l_1, l_2), ... (l_m, l_m)]
+    - `class_tuples_: numpy array of the difference classifier classes as class pairs [(0, 0), (0, 1), ... (q, q)]
     """
     
     def  __init__(self, clf_a, clf_b):
@@ -116,7 +122,9 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict(self, X):
         """
-        Predict difference class labels, the output shape is (n,).
+        Predict class labels
+        :param X: input data in array of shape (n, p)
+        :return:  predictions in array of shape (n, )
         """
         X = check_array(X)
         pred_a = self.clf_a.predict(X)
@@ -127,7 +135,9 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
 
     def predict_proba(self, X):
         """
-        Predict probabilities for the difference classes, the output shape is (n, m)
+        Predict probabilities for the q class labels
+        :param X: input data in array of shape (n, p)
+        :return: predictions in array of shape (n, q)
         """
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
@@ -138,8 +148,9 @@ class MulticlassDifferenceClassifier(BaseEstimator, ClassifierMixin):
         
     def predict_log_proba(self, X):
         """
-        Predict log-probabilities instead of probabilities for the difference classes,
-        the output shape is (n, m)
+        Predict log-transformed probabilities for the q class labels
+        :param X: input data in array of shape (n, p)
+        :return: predictions in array of shape (n, q)
         """
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)

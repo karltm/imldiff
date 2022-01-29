@@ -7,7 +7,7 @@ from util import get_index_and_name, plot_decision_boundary
 
 
 class ModelComparer:
-    """ Helper class for comparing two models, that provide API access similar to scikit-learn's models """
+    """ Helper class for comparing two models """
     
     def __init__(self, clf_a, clf_b, feature_names):
         self.feature_names = np.array(feature_names)

@@ -292,7 +292,7 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
 
 def _make_plot_colors(n_values, fill=None, color=None):
     if color is None:
-        color = np.repeat(True, n_values)
+        color = np.repeat(False, n_values)
     if fill is None:
         fill = np.repeat(True, n_values)
     if color.dtype == bool:

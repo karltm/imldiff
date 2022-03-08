@@ -186,7 +186,7 @@ def evaluate_generated_data(explanation):
 
 def evaluate(explanation, X, y):
     model = get_surrogate_tree(explanation)
-    surrogate_tree.evaluate(model, X, y)
+    return surrogate_tree.evaluate(model, X, y)
 
 
 def plot_tree_leafs_2d(explanation, comparer, X, feature_x=0, feature_y=1, figsize=(7, 7)):

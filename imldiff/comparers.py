@@ -187,7 +187,7 @@ class ModelComparer:
         return get_index_and_name(self.class_names, label)
 
     def plot_decision_boundaries(self, X, X_display=None, kind='label', x=0, y=1,
-                                 xlim=None, ylim=None, zlim=None, type='mclass-diffclf', show=True, **kwargs):
+                                 xlim=None, ylim=None, zlim=None, type='mclass-diffclf', fig=None, ax=None, **kwargs):
         x_idx, x_name = self.check_feature(x)
         y_idx, y_name = self.check_feature(y)
 
@@ -205,7 +205,8 @@ class ModelComparer:
             else:
                 raise Exception('invalid type: ' + str(type))
 
-            fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
+            if fig is None or ax is None:
+                fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
             plot_decision_boundary(X, z,
                                    feature_names=self.feature_names,
                                    X_display=X_display,
@@ -233,7 +234,8 @@ class ModelComparer:
             outcome_space_readable = 'Probability' if kind == 'proba' else 'Log odds'
 
             if type == 'bin-diffclf':
-                fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
+                if fig is None or ax is None:
+                    fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
                 plot_decision_boundary(X, binary_diff_predictions, feature_names=self.feature_names, predict=predict_binary,
                                        zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim,
                                        z_label=outcome_space_readable + ' of different outcomes', **kwargs)
@@ -249,9 +251,6 @@ class ModelComparer:
                                            z_label=f'{outcome_space_readable} of {class_name}', **kwargs)
             else:
                 raise Exception('invalid type: ' + str(type))
-
-        if show:
-            plt.show()
                 
     def plot_confusion_matrix(self, X):
         pred_a = self.clf_a.predict(X)
@@ -262,7 +261,6 @@ class ModelComparer:
         disp.plot(ax=ax)
         ax.set_ylabel('predictions of A')
         ax.set_xlabel('predictions of B')
-        plt.show()
 
 
 def _encode_one_hot(labels, classes):

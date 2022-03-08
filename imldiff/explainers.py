@@ -10,6 +10,7 @@ import warnings
 from comparers import ModelComparer
 from IPython.display import display
 from shap.utils import approximate_interactions
+from shap.plots.colors import red_blue
 
 
 def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display: np.ndarray = None,
@@ -322,41 +323,43 @@ def _make_continuous_plot_colors(n_values, fill=None, color=None):
     if fill is not None and np.sum(fill) > 0:
         draw_steps[fill] = 1
     plot_colors = color
-    cmaps = ['coolwarm', 'RdYlBu_r']
+    cmaps = ['RdYlBu_r', red_blue]
     return draw_steps, plot_colors, cmaps
 
 
-def plot_feature_dependencies(shap_values, color=None, fill=None, alpha=None, jitter=False):
+def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=None, alpha=None, jitter=None,
+                              vlines=None, figsize=None):
     shap_values = ensure_shap_values_are_3d(shap_values)
-    for feature in shap_values.feature_names:
-        plot_feature_dependencies_for_classes(shap_values, feature, color=color, fill=fill, alpha=alpha, show=False,
-                                              jitter=jitter)
-    plt.show()
-
-
-def plot_feature_dependencies_for_classes(shap_values, feature, color=None, color_label=None, fill=None, alpha=None,
-                                          show=True, jitter=False, vlines=None):
+    if figsize is None:
+        figsize = (7, 5)
     ncols = len(shap_values.output_names)
-    fig, axs = plt.subplots(ncols=ncols, figsize=(7*ncols, 5), sharex='all', sharey='all', squeeze=False, constrained_layout=True)
+    nrows = len(shap_values.feature_names)
+    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(figsize[0]*ncols, figsize[1]*nrows),
+                            sharey='row', squeeze=False)
     sc = None
-    for class_name, ax in zip(shap_values.output_names, axs.flat):
-        sc = _plot_feature_dependence(shap_values[:, :, class_name], feature,
-                                      title=class_name, color=color, fill=fill, alpha=alpha, show=False,
-                                      ax=ax, jitter=jitter, vlines=vlines)
-    if show:
-        if color_label is not None and sc is not None:
-            fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
-        plt.show()
+    for row_idx, (axs_row, feature) in enumerate(zip(axs, shap_values.feature_names)):
+        for col_idx, (class_name, ax) in enumerate(zip(shap_values.output_names, axs_row)):
+            sc = plot_feature_dependence(shap_values[:, :, class_name], feature, color=color, fill=fill, alpha=alpha,
+                                          ax=ax,
+                                          title=class_name if row_idx == 0 else None,
+                                          jitter=jitter[row_idx] if jitter is not None else None,
+                                          vlines=vlines[row_idx] if vlines is not None else None)
+            if col_idx > 0:
+                ax.set_ylabel(None)
+                plt.setp(ax.get_yticklabels(), visible=False)
+                #plt.setp(ax.get_yticklines(), visible=False)
+    plt.subplots_adjust(wspace=.0)
+    if color_label is not None and sc is not None:
+        fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
 
 
-def _plot_feature_dependence(shap_values, feature, title=None, color=None, fill=None, alpha=None,
-                             show=True, ax=None, jitter=False,
-                             vlines=None):
+def plot_feature_dependence(shap_values, feature, title=None, color=None, color_label=None, fill=None, alpha=None,
+                            fig=None, ax=None, jitter=False, vlines=None):
     if isinstance(feature, (int, np.integer)):
         feature = shap_values.feature_names[feature]
     s = shap_values[:, feature]
     if ax is None:
-        _, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
+        fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
     draw_steps, plot_colors, cmaps = _make_plot_colors(len(shap_values), fill, color)
     sc = None
     for draw_step in np.unique(draw_steps):
@@ -371,8 +374,8 @@ def _plot_feature_dependence(shap_values, feature, title=None, color=None, fill=
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)
-    if show:
-        plt.show()
+    if sc is not None and fig is not None:
+        fig.colorbar(sc, ax=ax, label=color_label)
     return sc
 
 

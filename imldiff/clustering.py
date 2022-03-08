@@ -4,12 +4,10 @@ from scipy.spatial import distance
 from scipy.cluster import hierarchy
 import matplotlib.pyplot as plt
 import seaborn as sns
-from IPython.display import display
-from explainers import plot_feature_dependencies_for_classes, calc_feature_order
-from util import RuleClassifier, constraint_matrix_to_rules, get_index_and_name, find_counterfactuals, \
+from explainers import plot_feature_dependencies, calc_feature_order
+from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, \
     counterfactuals_to_constraint_matrix
-from sklearn.metrics import classification_report
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+from sklearn.metrics import classification_report, precision_recall_fscore_support
 
 
 class Explanation:
@@ -53,10 +51,10 @@ class Explanation:
         self.feature_order, self.feature_importances = calc_feature_order(self.shap_values)
 
     def _calculate_counterfactuals(self):
-        self.counterfactuals = {}
+        self.counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
         if np.sum(self.highlight) == 0 or self.diff_class is None:
             return
-        self.counterfactuals = find_counterfactuals(self.comparer, self.data[self.highlight], self.root.data,
+        self.counterfactuals |= find_counterfactuals(self.comparer, self.data[self.highlight], self.root.data,
                                                     self.feature_precisions,
                                                     list(self.comparer.class_names).index(self.diff_class))
 
@@ -81,13 +79,16 @@ class Explanation:
                            self.categorical_features, self.feature_precisions, self.orig_highlight,
                            self.diff_class, self)
 
-    def plot_feature_dependence(self, feature, classes=None, alpha=None, color=None, fill=None, focus=None):
+    def plot_feature_dependence(self, *features, classes=None, alpha=None, color=None, fill=None, focus=None,
+                                figsize=None):
         if focus is not None:
             fill = np.in1d(self.instance_indices, focus.instance_indices)
             counterfactuals = focus.counterfactuals
         else:
             counterfactuals = self.counterfactuals
-        feature_idx, feature_name = self.comparer.check_feature(feature)
+        if len(features) == 0:
+            features = self.features_ordered
+        features = [self.comparer.check_feature(feature)[1] for feature in features]
         if classes is None:
             classes = self.cluster_classes
         if color is None:
@@ -96,14 +97,12 @@ class Explanation:
         else:
             color_feature_idx, color_feature_name = self.comparer.check_feature(color)
             color = self.data[:, color_feature_idx]
-        jitter = feature_name in self.categorical_features
         s = self.shap_values[:, :, classes]
-        vlines = []
-        if feature_name in counterfactuals:
-            for cf in counterfactuals[feature_name]:
-                vlines.append(cf.value)
-        plot_feature_dependencies_for_classes(s, feature, color=color, color_label=color_feature_name, fill=fill,
-                                              alpha=alpha, jitter=jitter, vlines=vlines)
+        vlines = [[cf.value for cf in counterfactuals[feature]]
+                  for feature in features if feature in counterfactuals]
+        jitter = [feature in self.categorical_features for feature in features]
+        plot_feature_dependencies(s[:, features], color=color, color_label=color_feature_name, fill=fill,
+                                  alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize)
 
     def plot_outcome_differences(self):
         diff_class_idx = list(self.comparer.class_names).index(self.diff_class)
@@ -122,7 +121,6 @@ class Explanation:
         chart = sns.catplot(x='class', y='difference', hue='actual class', data=df, alpha=0.6, aspect=2, legend=False)
         chart.axes[0][0].axhline(y=0, color='black', linewidth=1, alpha=0.5)
         plt.legend(loc='upper right')
-        plt.show()
         diff_ranges_of_diff_class = [f'{round(col.min(), 2)} to {round(col.max(), 2)}'
                                      for col in log_odds_diff[self.highlight].T]
         print(dict(zip(other_classes, diff_ranges_of_diff_class)))
@@ -167,6 +165,12 @@ class Explanation:
         y_diffclf = self.highlight
         y_expl = r.predict(self.data)
         print(classification_report(y_diffclf, y_expl))
+        precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y_diffclf, y_expl, labels=r.classes_)
+        df = pd.DataFrame(np.array((precisions, recalls, f1_scores, supports)).T,
+                          columns=['Precision', 'Recall', 'F1 Score', 'Support'],
+                          index=r.classes_)
+        df['Support'] = df['Support'].astype(int)
+        return df
         #cm = confusion_matrix(y_diffclf, y_expl, labels=[False, True])
         #disp = ConfusionMatrixDisplay(confusion_matrix=cm)
         #fig, ax = plt.subplots(constrained_layout=True)

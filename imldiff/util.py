@@ -5,7 +5,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from shap.plots import colors
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, precision_recall_fscore_support
 
 
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -135,7 +135,8 @@ def calc_constraint_error(feature_names, constraints_true, constraints_test, ind
     rmse = np.sqrt(np.square(errors).mean())
     boundary_miss_rate = pd.Series(n_boundaries_miss / n_boundaries_true, index=feature_names)
     boundary_add_rate = pd.Series(n_boundaries_add / n_boundaries_test, index=feature_names)
-    return errors, rmse, boundary_miss_rate, boundary_add_rate
+    statistics = pd.DataFrame([rmse, boundary_miss_rate, boundary_add_rate], index=['RMSE', 'BMR', 'BAR']).T
+    return errors, statistics
 
 
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
@@ -257,10 +258,10 @@ def escape_feature_name(feature_name):
         return feature_name
 
 
-def print_complexity(constraints):
-    print(f'Number of rules: {len(constraints)}')
+def get_complexity(constraints):
+    n_rules = len(constraints)
     n_constraints = np.sum(~np.isnan(constraints))
-    print(f'Number of constraints: {n_constraints} ({round(n_constraints/len(constraints), 1)} per rule)')
+    return pd.Series([n_rules, n_constraints], index=['Rules', 'Constraints'])
 
 
 class RuleClassifier(BaseEstimator, ClassifierMixin):
@@ -298,6 +299,12 @@ def evaluate(model, X, y, class_names=None):
         target_names = np.array(class_names)[model.classes_]
     y_pred = model.predict(X)
     print(classification_report(y, y_pred, target_names=target_names, labels=model.classes_))
+    precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y, y_pred, labels=model.classes_)
+    df = pd.DataFrame(np.array((precisions, recalls, f1_scores, supports)).T,
+                      columns=['Precision', 'Recall', 'F1 Score', 'Support'],
+                      index=target_names)
+    df['Support'] = df['Support'].astype(int)
+    return df
     #cm = confusion_matrix(y, y_pred, labels=model.classes_)
     #disp = ConfusionMatrixDisplay(confusion_matrix=cm)
     #fig, ax = plt.subplots(constrained_layout=True)

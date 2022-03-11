@@ -211,7 +211,6 @@ def plot_data_2d(*shap_values_tuple, title=None, x=0, y=1, **kwargs):
                 ax.set_ylabel(display_shap_values.feature_names[1])
                 plot_idx += 1
         fig.colorbar(cs, ax=ax, shrink=0.9)
-    plt.show()
 
 
 def _get_display_data(shap_values):
@@ -236,7 +235,7 @@ def _plot_feature_importance_bar_singleclass(shap_values, title=None, feature_or
         elif len(shap_values.shape) == 1:
             feature_order = np.flip(np.argsort(shap_values.values))
     plt.title(title)
-    shap.plots.bar(shap_values, order=feature_order, max_display=len(feature_order))
+    shap.plots.bar(shap_values, order=feature_order, max_display=len(feature_order), show=False)
 
 
 def _plot_feature_importance_bar_multiclass(shap_values, title=None):
@@ -246,7 +245,6 @@ def _plot_feature_importance_bar_multiclass(shap_values, title=None):
                       class_names=shap_values.output_names, show=False)
     plt.legend(loc='right')
     plt.title(title)
-    plt.show()
 
 
 def plot_feature_importance_scatter(shap_values, title=None, feature_order=None, class_order=None, **kwargs):
@@ -288,7 +286,6 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
                                         feature_names=shap_values.output_names)
         shap.plots.beeswarm(shap_values_, order=class_order, show=False, plot_size=plot_size, **kwargs)
         plt.title(shap_values.feature_names[feature_idx])
-        plt.show()
 
 
 def _make_plot_colors(n_values, fill=None, color=None):

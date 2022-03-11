@@ -4,7 +4,7 @@ from scipy.spatial import distance
 from scipy.cluster import hierarchy
 import matplotlib.pyplot as plt
 import seaborn as sns
-from explainers import plot_feature_dependencies, calc_feature_order
+from explainers import plot_feature_dependencies, calc_feature_order, plot_feature_dependence
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, \
     counterfactuals_to_constraint_matrix
 from sklearn.metrics import classification_report, precision_recall_fscore_support
@@ -280,3 +280,24 @@ def make_clustering(comparer, shap_values, diff_class=None, cluster_classes=None
     return node
 
 
+def plot_joint_feature_dependence(feature, **nodes):
+    root = next(iter(nodes.values())).root
+    jitter = feature in root.categorical_features
+    nrows, ncols = len(nodes), len(root.cluster_classes)
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='all', sharey='all', figsize=(4 * ncols, 3 * nrows))
+    for row_idx, (name, node) in enumerate(nodes.items()):
+        for col_idx, label in enumerate(root.cluster_classes):
+            ax = axs[row_idx, col_idx]
+            title = label if row_idx == 0 else None
+            cf_values = [cf.value for cf in node.counterfactuals[feature]]
+            plot_feature_dependence(node.shap_values[:, :, label], feature, color=node.highlight, vlines=cf_values,
+                                    title=title, ax=ax, jitter=jitter, alpha=0.5)
+            if col_idx == 0:
+                ax.set_ylabel(f'SHAP Value of {name}')
+            else:
+                ax.set_ylabel(None)
+                plt.setp(ax.get_yticklabels(), visible=False)
+            if row_idx != nrows - 1:
+                ax.set_xlabel(None)
+                plt.setp(ax.get_xticklabels(), visible=False)
+        plt.subplots_adjust(wspace=.0, hspace=.0)

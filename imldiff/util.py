@@ -1,3 +1,4 @@
+import re
 from ast import literal_eval
 from sklearn.base import BaseEstimator, ClassifierMixin
 import pandas as pd
@@ -9,6 +10,7 @@ from sklearn.metrics import classification_report, precision_recall_fscore_suppo
 
 
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+regex = re.compile('[^a-zA-Z]')
 
 
 def get_index_and_name(names, index_or_name):
@@ -230,32 +232,52 @@ class CombinationClassifier:
                (self.comparer.clf_b.predict(X) == self.label_explain_b)
 
 
-def constraint_matrix_to_rules(constraints, feature_names, feature_order=None):
+def constraint_matrix_to_rules(constraints, feature_names, feature_order=None, precisions=None, latex=False):
     if feature_order is None:
         feature_order = range(len(feature_names))
     rules = []
+    lt = '<'
+    leq = '\leq' if latex else '<='
+    gt = '>'
+    land = '\land' if latex else 'and'
     for constraint in constraints:
         terms = []
         for feature_idx in feature_order:
-            feature_name = escape_feature_name(feature_names[feature_idx])
+            feature_name = escape_feature_name(feature_names[feature_idx], latex)
             lower_boundary = constraint[feature_idx, 0]
             upper_boundary = constraint[feature_idx, 1]
+            precision = _get_precision(feature_idx, precisions)
             if not np.isnan(lower_boundary):
                 if not np.isnan(upper_boundary):
-                    terms.append(f'{lower_boundary} < {feature_name} <= {upper_boundary}')
+                    terms.append(f'{_fmt(lower_boundary, precision)} {lt} {feature_name} {leq} {_fmt(upper_boundary, precision)}')
                 else:
-                    terms.append(f'{feature_name} > {lower_boundary}')
+                    terms.append(f'{feature_name} {gt} {_fmt(lower_boundary, precision)}')
             elif not np.isnan(upper_boundary):
-                terms.append(f'{feature_name} <= {upper_boundary}')
-        rules.append(' and '.join(terms))
+                terms.append(f'{feature_name} {leq} {_fmt(upper_boundary, precision)}')
+        rules.append(f' {land} '.join(terms))
     return rules
 
 
-def escape_feature_name(feature_name):
-    if ' ' in feature_name or '-' in feature_name:
-        return f'`{feature_name}`'
+def _get_precision(feature_idx, precisions):
+    if precisions is not None:
+        return precisions[feature_idx]
+    return None
+
+
+def _fmt(x, precision):
+    if precision is None:
+        return str(x)
+    return ('{:.' + str(precision) + 'f}').format(x)
+
+
+def escape_feature_name(feature_name, latex=False):
+    if latex:
+        return '\mathit{' + regex.sub('', feature_name) + '}'
     else:
-        return feature_name
+        if ' ' in feature_name or '-' in feature_name:
+            return f'`{feature_name}`'
+        else:
+            return feature_name
 
 
 def get_complexity(constraints):

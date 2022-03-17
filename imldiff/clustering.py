@@ -1,5 +1,3 @@
-import pickle
-
 import pandas as pd
 import numpy as np
 from scipy.spatial import distance
@@ -14,7 +12,7 @@ from sklearn.metrics import classification_report, precision_recall_fscore_suppo
 
 class Explanation:
     def __init__(self, comparer, orig_shap_values, instance_indices, cluster_classes, orig_pred_classes,
-                 categorical_features, feature_precisions, orig_highlight, diff_class=None, parent=None):
+                 categorical_features, feature_precisions, orig_highlight, focus_class=None, parent=None):
         self.comparer = comparer
         self.parent = parent
         self.root = self if parent is None else parent.root
@@ -22,7 +20,7 @@ class Explanation:
         self.orig_shap_values = orig_shap_values
         self.shap_values = orig_shap_values[instance_indices]
         self.data = pd.DataFrame(self.shap_values.data, columns=self.shap_values.feature_names, index=instance_indices)
-        self.diff_class = diff_class
+        self.focus_class = focus_class
         self.feature_precisions = feature_precisions
         self.orig_highlight = orig_highlight
         self.highlight = orig_highlight[instance_indices]
@@ -32,7 +30,7 @@ class Explanation:
         self.pred_classes = orig_pred_classes[instance_indices]
         self.class_counts = pd.Series(self.pred_classes).value_counts()
         self._calculate_feature_order()
-        if parent is not None and self.class_counts.get(self.diff_class) == parent.class_counts.get(self.diff_class):
+        if parent is not None and self.class_counts.get(self.focus_class) == parent.class_counts.get(self.focus_class):
             self.counterfactuals = parent.counterfactuals
         else:
             self._calculate_counterfactuals()
@@ -54,11 +52,11 @@ class Explanation:
 
     def _calculate_counterfactuals(self):
         self.counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
-        if np.sum(self.highlight) == 0 or self.diff_class is None:
+        if np.sum(self.highlight) == 0 or self.focus_class is None:
             return
         self.counterfactuals |= find_counterfactuals(self.comparer, self.data.iloc[self.highlight].to_numpy(),
                                                      self.root.data.to_numpy(), self.feature_precisions,
-                                                     list(self.comparer.class_names).index(self.diff_class))
+                                                     list(self.comparer.class_names).index(self.focus_class))
 
     def describe_feature_differences(self, feature):
         feature_idx, feature_name = self.comparer.check_feature(feature)
@@ -84,7 +82,7 @@ class Explanation:
             instance_indices = self.instance_indices[by]
         return Explanation(self.comparer, self.orig_shap_values, instance_indices, self.cluster_classes, self.orig_pred_classes,
                            self.categorical_features, self.feature_precisions, self.orig_highlight,
-                           self.diff_class, self)
+                           self.focus_class, self)
 
     def plot_feature_dependence(self, *features, classes=None, alpha=None, color=None, fill=None, focus=None,
                                 figsize=None, fig=None, axs=None):
@@ -112,14 +110,14 @@ class Explanation:
                                   alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize, fig=fig, axs=axs)
 
     def plot_outcome_differences(self):
-        diff_class_idx = list(self.comparer.class_names).index(self.diff_class)
-        other_classes = [class_ for class_ in self.cluster_classes if class_ != self.diff_class]
+        focus_class_idx = list(self.comparer.class_names).index(self.focus_class)
+        other_classes = [class_ for class_ in self.cluster_classes if class_ != self.focus_class]
         other_class_indices = [list(self.comparer.class_names).index(class_) for class_ in other_classes]
         s = self.shap_values
         log_odds_per_class = s.base_values + s.values.sum(1)
-        log_odds_of_diff_class = log_odds_per_class[:, diff_class_idx]
+        log_odds_of_focus_class = log_odds_per_class[:, focus_class_idx]
         log_odds_of_other_classes = log_odds_per_class[:, other_class_indices]
-        log_odds_diff = log_odds_of_other_classes - np.array([log_odds_of_diff_class for _ in other_class_indices]).T
+        log_odds_diff = log_odds_of_other_classes - np.array([log_odds_of_focus_class for _ in other_class_indices]).T
 
         classes = np.concatenate([np.repeat(class_, len(log_odds_diff)) for class_ in other_classes])
         class_labels = np.concatenate([self.pred_classes for _ in other_class_indices])
@@ -128,9 +126,9 @@ class Explanation:
         chart = sns.catplot(x='class', y='difference', hue='actual class', data=df, alpha=0.6, aspect=2, legend=False)
         chart.axes[0][0].axhline(y=0, color='black', linewidth=1, alpha=0.5)
         plt.legend(loc='upper right')
-        diff_ranges_of_diff_class = [f'{round(col.min(), 2)} to {round(col.max(), 2)}'
+        diff_ranges_of_focus_class = [f'{round(col.min(), 2)} to {round(col.max(), 2)}'
                                      for col in log_odds_diff[self.highlight].T]
-        print(dict(zip(other_classes, diff_ranges_of_diff_class)))
+        print(dict(zip(other_classes, diff_ranges_of_focus_class)))
 
     def get_parent(self, n=1):
         if self.parent is None or n == 0:
@@ -190,10 +188,10 @@ class Explanation:
 class ExplanationNode(Explanation):
     def __init__(self, comparer, orig_shap_values, cluster_node, instance_indices, cluster_classes, orig_pred_classes,
                  distance_matrix, linkage_matrix, categorical_features, feature_precisions, orig_highlight,
-                 diff_class=None, parent=None):
+                 focus_class=None, parent=None):
         super(ExplanationNode, self).__init__(comparer, orig_shap_values, instance_indices, cluster_classes,
                                               orig_pred_classes, categorical_features, feature_precisions,
-                                              orig_highlight, diff_class, parent)
+                                              orig_highlight, focus_class, parent)
         self.cluster_node = cluster_node
         self.distance_matrix = distance_matrix
         self.linkage_matrix = linkage_matrix
@@ -208,7 +206,7 @@ class ExplanationNode(Explanation):
         instance_indices = np.array(cluster_node.pre_order())
         return ExplanationNode(self.comparer, self.orig_shap_values, cluster_node, instance_indices, self.cluster_classes,
                                self.orig_pred_classes, self.distance_matrix, self.linkage_matrix, self.categorical_features,
-                               self.feature_precisions, self.orig_highlight, self.diff_class, self)
+                               self.feature_precisions, self.orig_highlight, self.focus_class, self)
 
     @property
     def distance(self):
@@ -242,17 +240,17 @@ class ExplanationNode(Explanation):
     def get_right(self):
         return self.right
 
-    def get_last_child_before_diff_class_split(self):
-        if not self.diff_class in list(self.class_counts.keys()):
+    def get_last_child_before_focus_class_split(self):
+        if not self.focus_class in list(self.class_counts.keys()):
             raise Exception('Difference class not present in cluster')
         if len(self.shap_values) == 1:
             return self
         left = self.get_left()
         right = self.get_right()
-        if right is not None and not self.diff_class in list(left.class_counts.keys()):
-            return right.get_last_child_before_diff_class_split()
-        if right is not None and not self.diff_class in list(right.class_counts.keys()):
-            return left.get_last_child_before_diff_class_split()
+        if right is not None and not self.focus_class in list(left.class_counts.keys()):
+            return right.get_last_child_before_focus_class_split()
+        if right is not None and not self.focus_class in list(right.class_counts.keys()):
+            return left.get_last_child_before_focus_class_split()
         return self
 
     def plot_dendrogram(self):
@@ -262,7 +260,7 @@ class ExplanationNode(Explanation):
         plt.show()
 
 
-def make_clustering(comparer, shap_values, diff_class=None, cluster_classes=None, categorical_features=None,
+def make_clustering(comparer, shap_values, focus_class=None, cluster_classes=None, categorical_features=None,
                     feature_precisions=None):
     if cluster_classes is None:
         cluster_classes = shap_values.output_names
@@ -278,12 +276,12 @@ def make_clustering(comparer, shap_values, diff_class=None, cluster_classes=None
     instance_indices = np.array(cluster_root.pre_order())
     pred_classes = comparer.predict_mclass_diff(shap_values.data)
     pred_classes = comparer.class_names[pred_classes]
-    if diff_class is not None:
-        highlight = pred_classes == diff_class
+    if focus_class is not None:
+        highlight = pred_classes == focus_class
     else:
         highlight = comparer.predict_bin_diff(shap_values.data)
     node = ExplanationNode(comparer, shap_values, cluster_root, instance_indices, cluster_classes, pred_classes, D, Z,
-                           categorical_features, feature_precisions, highlight, diff_class)
+                           categorical_features, feature_precisions, highlight, focus_class)
     return node
 
 

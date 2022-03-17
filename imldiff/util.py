@@ -10,7 +10,7 @@ from sklearn.metrics import classification_report, precision_recall_fscore_suppo
 
 
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-regex = re.compile('[^a-zA-Z]')
+regex = re.compile('[^a-zA-Z0-9]')
 
 
 def get_index_and_name(names, index_or_name):
@@ -272,7 +272,12 @@ def _fmt(x, precision):
 
 def escape_feature_name(feature_name, latex=False):
     if latex:
-        return '\mathit{' + regex.sub('', feature_name) + '}'
+        feature_name = regex.sub('', feature_name)
+        if feature_name == 'x1':
+            feature_name = 'x_1'
+        if feature_name == 'x2':
+            feature_name = 'x_2'
+        return '\mathit{' + feature_name + '}'
     else:
         if ' ' in feature_name or '-' in feature_name:
             return f'`{feature_name}`'
@@ -320,7 +325,7 @@ def evaluate(model, X, y, class_names=None):
     else:
         target_names = np.array(class_names)[model.classes_]
     y_pred = model.predict(X)
-    print(classification_report(y, y_pred, target_names=target_names, labels=model.classes_))
+    # print(classification_report(y, y_pred, target_names=target_names, labels=model.classes_))
     precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y, y_pred, labels=model.classes_)
     df = pd.DataFrame(np.array((precisions, recalls, f1_scores, supports)).T,
                       columns=['Precision', 'Recall', 'F1 Score', 'Support'],

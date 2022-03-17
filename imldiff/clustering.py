@@ -1,3 +1,5 @@
+import pickle
+
 import pandas as pd
 import numpy as np
 from scipy.spatial import distance
@@ -19,7 +21,7 @@ class Explanation:
         self.instance_indices = instance_indices
         self.orig_shap_values = orig_shap_values
         self.shap_values = orig_shap_values[instance_indices]
-        self.data = self.shap_values.data
+        self.data = pd.DataFrame(self.shap_values.data, columns=self.shap_values.feature_names, index=instance_indices)
         self.diff_class = diff_class
         self.feature_precisions = feature_precisions
         self.orig_highlight = orig_highlight
@@ -54,33 +56,38 @@ class Explanation:
         self.counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
         if np.sum(self.highlight) == 0 or self.diff_class is None:
             return
-        self.counterfactuals |= find_counterfactuals(self.comparer, self.data[self.highlight], self.root.data,
-                                                    self.feature_precisions,
-                                                    list(self.comparer.class_names).index(self.diff_class))
+        self.counterfactuals |= find_counterfactuals(self.comparer, self.data.iloc[self.highlight].to_numpy(),
+                                                     self.root.data.to_numpy(), self.feature_precisions,
+                                                     list(self.comparer.class_names).index(self.diff_class))
 
     def describe_feature_differences(self, feature):
         feature_idx, feature_name = self.comparer.check_feature(feature)
-        feature_data = self.data[self.highlight, feature_idx]
+        feature_data = self.data.iloc[self.highlight, feature_idx]
+        if len(feature_data) == 0:
+            return
         lower_bound = feature_data.min()
         upper_bound = feature_data.max()
         if lower_bound == upper_bound:
             print(f'{feature_name} == {lower_bound}', end='')
         else:
-            if lower_bound > self.root.data[:, feature_idx].min():
+            if lower_bound > self.root.data.iloc[:, feature_idx].min():
                 print(f'{lower_bound} <= ', end='')
             print(feature_name, end='')
-            if upper_bound < self.root.data[:, feature_idx].max():
+            if upper_bound < self.root.data.iloc[:, feature_idx].max():
                 print(f' <= {upper_bound}', end='')
         print()
 
-    def filter(self, mask):
-        instance_indices = self.instance_indices[mask]
+    def filter(self, by):
+        if isinstance(by, str):
+            instance_indices = self.data.query(by).index.to_numpy()
+        else:
+            instance_indices = self.instance_indices[by]
         return Explanation(self.comparer, self.orig_shap_values, instance_indices, self.cluster_classes, self.orig_pred_classes,
                            self.categorical_features, self.feature_precisions, self.orig_highlight,
                            self.diff_class, self)
 
     def plot_feature_dependence(self, *features, classes=None, alpha=None, color=None, fill=None, focus=None,
-                                figsize=None):
+                                figsize=None, fig=None, axs=None):
         if focus is not None:
             fill = np.in1d(self.instance_indices, focus.instance_indices)
             counterfactuals = focus.counterfactuals
@@ -91,18 +98,18 @@ class Explanation:
         features = [self.comparer.check_feature(feature)[1] for feature in features]
         if classes is None:
             classes = self.cluster_classes
+        color_feature_name = None
         if color is None:
             color = self.highlight
-            color_feature_name = None
-        else:
+        elif isinstance(color, str) or isinstance(color, int):
             color_feature_idx, color_feature_name = self.comparer.check_feature(color)
-            color = self.data[:, color_feature_idx]
+            color = self.data.iloc[:, color_feature_idx]
         s = self.shap_values[:, :, classes]
         vlines = [[cf.value for cf in counterfactuals[feature]]
                   for feature in features if feature in counterfactuals]
         jitter = [feature in self.categorical_features for feature in features]
         plot_feature_dependencies(s[:, features], color=color, color_label=color_feature_name, fill=fill,
-                                  alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize)
+                                  alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize, fig=fig, axs=axs)
 
     def plot_outcome_differences(self):
         diff_class_idx = list(self.comparer.class_names).index(self.diff_class)
@@ -132,19 +139,19 @@ class Explanation:
 
     def describe_feature(self, feature):
         feature_idx, feature_name = self.comparer.check_feature(feature)
-        feature_data = self.data[:, feature_idx]
-        root_feature_data = self.root.data[:, feature_idx]
+        feature_data = self.data.iloc[:, feature_idx]
+        root_feature_data = self.root.data.iloc[:, feature_idx]
         if feature_name in self.categorical_features:
             return pd.DataFrame([
                 root_feature_data.value_counts(),
                 feature_data.value_counts(),
-                feature_data[self.highlight].value_counts()
+                feature_data.iloc[self.highlight].value_counts()
             ], index=['global', 'local-all', 'local-diff'])
         else:
             return pd.DataFrame(index=['global', 'local-all', 'local-diff'], data=[
                 root_feature_data,
                 feature_data,
-                feature_data[self.highlight]]).T.describe()
+                feature_data.iloc[self.highlight]]).T.describe()
 
     def rule_from_counterfactuals(self, *include_features):
         if len(include_features) == 0:
@@ -280,24 +287,27 @@ def make_clustering(comparer, shap_values, diff_class=None, cluster_classes=None
     return node
 
 
+get_node_path = lambda node: get_node_path(node.parent) + [node] if node is not None else []
+
+
 def plot_joint_feature_dependence(feature, **nodes):
-    root = next(iter(nodes.values())).root
-    jitter = feature in root.categorical_features
-    nrows, ncols = len(nodes), len(root.cluster_classes)
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, sharex='all', sharey='all', figsize=(4 * ncols, 3 * nrows))
-    for row_idx, (name, node) in enumerate(nodes.items()):
-        for col_idx, label in enumerate(root.cluster_classes):
-            ax = axs[row_idx, col_idx]
-            title = label if row_idx == 0 else None
-            cf_values = [cf.value for cf in node.counterfactuals[feature]]
-            plot_feature_dependence(node.shap_values[:, :, label], feature, color=node.highlight, vlines=cf_values,
-                                    title=title, ax=ax, jitter=jitter, alpha=0.5)
-            if col_idx == 0:
-                ax.set_ylabel(f'SHAP Value of {name}')
-            else:
-                ax.set_ylabel(None)
-                plt.setp(ax.get_yticklabels(), visible=False)
-            if row_idx != nrows - 1:
-                ax.set_xlabel(None)
-                plt.setp(ax.get_xticklabels(), visible=False)
+    fig, axs = plt.subplots(nrows=len(nodes), ncols=3, figsize=(3*6, len(nodes)*4), sharex='all', sharey='all')
+    for (node_name, node), axs_row in zip(nodes.items(), axs):
+        node.plot_feature_dependence(feature, alpha=0.5, fig=fig, axs=axs_row)
         plt.subplots_adjust(wspace=.0, hspace=.0)
+        axs_row[0].set_ylabel(f'SHAP Value of {node_name}')
+
+
+def compare_indiv_dep_plots(node, feature, alpha=0.5):
+    fig, axs = plt.subplots(ncols=3, nrows=2, sharex='all', sharey='row', figsize=(3*7, 1.5*5), gridspec_kw={'height_ratios': [2,1]})
+    node.plot_feature_dependence(feature, classes=['A.0', 'A.1', 'A.2'], alpha=alpha*2/3, color=np.repeat(False, len(node.data)), fig=fig, axs=axs[0])
+    node.plot_feature_dependence(feature, classes=['B.0', 'B.1', 'B.2'], alpha=alpha*2/3, color=np.repeat(True, len(node.data)), fig=fig, axs=axs[0])
+    for ax, label in zip(axs[0], node.comparer.base_class_names):
+        ax.set_title(label)
+    axs[1][0].set_ylabel('Difference')
+    for label, ax in zip(node.comparer.base_class_names, axs[1]):
+        diff = node.shap_values[:, feature, 'B.' + label].values - node.shap_values[:, feature, 'A.' + label].values
+        ax.scatter(node.data[feature], diff, alpha=alpha)
+        ax.axhline(0)
+        ax.set_xlabel(feature)
+    plt.subplots_adjust(wspace=.0, hspace=.0)

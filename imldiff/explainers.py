@@ -13,6 +13,9 @@ from shap.utils import approximate_interactions
 from shap.plots.colors import red_blue
 
 
+color_palette = plt.rcParams["axes.prop_cycle"].by_key()['color']
+
+
 def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display: np.ndarray = None,
                                explanation_type='mclass_diff', space_type=None,
                                algorithm='auto', masker: shap.maskers.Masker = None):
@@ -297,6 +300,8 @@ def _make_plot_colors(n_values, fill=None, color=None):
         return _make_binary_plot_colors(n_values, fill, color)
     elif color.dtype == float:
         return _make_continuous_plot_colors(n_values, fill, color)
+    elif color.dtype.type == np.str_:
+        return _make_str_plot_colors(n_values, fill, color)
     else:
         raise Exception('color only supports a bool or number array')
 
@@ -324,15 +329,28 @@ def _make_continuous_plot_colors(n_values, fill=None, color=None):
     return draw_steps, plot_colors, cmaps
 
 
+def _make_str_plot_colors(n_values, fill, color):
+    color_set = np.unique(color)
+    if len(color_set) > 10:
+        raise Exception('supports only 10 different colors at max. currently')
+    draw_steps = np.array(color)
+    plot_colors = np.array([color_palette[color_set.tolist().index(c)] for c in color])
+    return draw_steps, plot_colors, None
+
+
 def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=None, alpha=None, jitter=None,
-                              vlines=None, figsize=None):
+                              vlines=None, figsize=None, fig=None, axs=None):
     shap_values = ensure_shap_values_are_3d(shap_values)
     if figsize is None:
         figsize = (7, 5)
     ncols = len(shap_values.output_names)
     nrows = len(shap_values.feature_names)
-    fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(figsize[0]*ncols, figsize[1]*nrows),
-                            sharey='row', squeeze=False)
+    if fig is None or axs is None:
+        fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(figsize[0]*ncols, figsize[1]*nrows),
+                                sharey='row', squeeze=False)
+    else:
+        if len(axs.shape) == 1:
+            axs = axs.reshape((1, axs.shape[0]))
     sc = None
     for row_idx, (axs_row, feature) in enumerate(zip(axs, shap_values.feature_names)):
         for col_idx, (class_name, ax) in enumerate(zip(shap_values.output_names, axs_row)):
@@ -364,13 +382,15 @@ def plot_feature_dependence(shap_values, feature, title=None, color=None, color_
         mask = draw_steps == draw_step
         s_plot = s[mask]
         current_plot_colors = plot_colors[mask]
-        sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha)
+        sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha, label=draw_step)
     if vlines is not None:
         for x in vlines:
             ax.axvline(x, alpha=0.6, linewidth=1, color='black', linestyle='--')
     ax.set_title(title)
     ax.set_xlabel(feature)
     ax.set_ylabel('SHAP value of ' + feature)
+    if draw_steps.dtype.type == np.str_:
+        ax.legend()
     if sc is not None and fig is not None:
         fig.colorbar(sc, ax=ax, label=color_label)
     return sc

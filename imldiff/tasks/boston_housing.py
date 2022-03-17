@@ -2,7 +2,7 @@ import pandas as pd
 import joblib
 
 categorical_features = ['AGE']
-feature_precisions = {'CRIM': 0,
+feature_precisions = {'CRIM': 1,
                       'ZN': 0,
                       'INDUS': 2,
                       'NOX': 2,

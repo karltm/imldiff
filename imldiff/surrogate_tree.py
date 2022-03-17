@@ -4,7 +4,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.tree._tree import Tree, TREE_UNDEFINED
-from util import plot_decision_boundary, constraint_matrix_to_rules, evaluate
+from util import plot_decision_boundary, constraint_matrix_to_rules, evaluate, RuleClassifier
+from sklearn.metrics import classification_report, precision_recall_fscore_support
 
 
 def train_surrogate_tree(X, y, max_depth=None):
@@ -140,3 +141,31 @@ def print_rules(rules, class_occurences, class_names=None, labels=None):
     for idx, (rule, class_occurences, label) in enumerate(zip(rules, class_occurences, labels), 1):
         print(f'{idx}. {rule} => {class_names[label]} {class_occurences.astype(int).tolist()}')
 
+
+def search_max_depth_parameter(X, y_true, feature_names, class_names, classes, start=2, stop=None):
+    indices = np.where(y_true)[0]
+    max_depth = start
+    parameters = []
+    metrics = []
+    while stop is None or max_depth <= stop:
+        model = train_surrogate_tree(X, y_true, max_depth=max_depth)
+        constraints, rules, _, labels, _ = extract_rules(model, feature_names, classes, X, y_true)
+        results = evaluate(model, X, y_true, class_names)
+        for label in np.unique(labels):
+            result = results.loc[class_names[label]]
+            mask = labels == label
+            rclf = RuleClassifier(feature_names, np.array(rules)[mask].tolist())
+            pred_rules = pd.Series(rclf.apply(X[indices]), index=indices)
+            pred_rules = pred_rules[pred_rules != 0]
+            rule_ids = np.unique(pred_rules) - 1
+            n_rules = len(rule_ids)
+            n_constraints = np.sum(~np.isnan(constraints[mask][rule_ids]))
+            parameters.append(max_depth)
+            metrics.append((label, result['Precision'], result['Recall'], n_rules, n_constraints))
+
+        if max_depth > model.get_depth():
+            break
+
+        max_depth += 1
+
+    return pd.DataFrame(metrics, index=parameters, columns=['label', 'precision', 'recall', 'rules', 'constraints'])

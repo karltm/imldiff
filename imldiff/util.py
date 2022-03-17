@@ -301,11 +301,14 @@ class RuleClassifier(BaseEstimator, ClassifierMixin):
         return self
 
     def predict(self, X):
-        df = pd.DataFrame(X, columns=self.feature_names)
-        y_pred = np.repeat(False, df.shape[0])
+        if isinstance(X, pd.DataFrame):
+            X = X.reset_index(drop=True)
+        else:
+            X = pd.DataFrame(X, columns=self.feature_names)
+        y_pred = np.repeat(False, X.shape[0])
         rule = ' or '.join(self.rules)
         if rule:
-            indices = df.query(rule).index
+            indices = X.query(rule).index
             y_pred[indices] = True
         return y_pred
 

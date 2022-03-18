@@ -1,6 +1,6 @@
 # Source: https://gitlab.com/andsta/diro2c/-/blob/develop/show_decision_boundaries_running_ex.py
 import copy
-from sklearn.datasets import make_classification
+from sklearn.datasets import make_classification, make_blobs
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -44,3 +44,8 @@ def make_task():
     blackbox2.fit(X2_train, y2_train)
 
     return blackbox1, blackbox2, X1, y1, feature_names, feature_precisions
+
+
+def make_test_set():
+    X, _ = make_blobs(n_samples=10000, centers=1, cluster_std=100, random_state=2)
+    return X

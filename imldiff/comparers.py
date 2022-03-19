@@ -91,7 +91,7 @@ class ModelComparer:
 
     def predict_combined_log_odds(self, X):
         y_pred_a = _calc_log_odds_from_log_proba(self.clf_a.predict_log_proba(X))
-        y_pred_b = _calc_log_odds_from_log_proba(self.clf_b.predict_proba(X))
+        y_pred_b = _calc_log_odds_from_log_proba(self.clf_b.predict_log_proba(X))
         return np.concatenate([y_pred_a, y_pred_b], axis=1)
 
     def predict_bin_diff(self, X):

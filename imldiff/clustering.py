@@ -1,3 +1,4 @@
+from pprint import pprint
 import pandas as pd
 import numpy as np
 from scipy.spatial import distance
@@ -6,7 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from explainers import plot_feature_dependencies, calc_feature_order, plot_feature_dependence
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, \
-    counterfactuals_to_constraint_matrix
+    counterfactuals_to_constraint_matrix, evaluate
 from sklearn.metrics import classification_report, precision_recall_fscore_support
 
 
@@ -84,16 +85,26 @@ class Explanation:
                            self.categorical_features, self.feature_precisions, self.orig_highlight,
                            self.focus_class, self)
 
-    def plot_feature_dependence(self, *features, classes=None, alpha=None, color=None, fill=None, focus=None,
+    def plot_feature_dependence(self, *features, classes=None, alpha=0.5, color=None, fill=None, focus=None,
+                                figsize=None, fig=None, axs=None, print_stats=False, show=True):
+        if len(features) == 0:
+            features = self.features_ordered
+        for feature in features:
+            if print_stats:
+                self.describe_feature_differences(feature)
+                pprint(self.counterfactuals[feature])
+            self._plot_feature_dependence(feature, classes, alpha, color, fill, focus, figsize, fig, axs)
+            if show:
+                plt.show()
+
+    def _plot_feature_dependence(self, feature, classes=None, alpha=0.5, color=None, fill=None, focus=None,
                                 figsize=None, fig=None, axs=None):
         if focus is not None:
             fill = np.in1d(self.instance_indices, focus.instance_indices)
             counterfactuals = focus.counterfactuals
         else:
             counterfactuals = self.counterfactuals
-        if len(features) == 0:
-            features = self.features_ordered
-        features = [self.comparer.check_feature(feature)[1] for feature in features]
+        feature = self.comparer.check_feature(feature)[1]
         if classes is None:
             classes = self.cluster_classes
         color_feature_name = None
@@ -103,10 +114,11 @@ class Explanation:
             color_feature_idx, color_feature_name = self.comparer.check_feature(color)
             color = self.data.iloc[:, color_feature_idx]
         s = self.shap_values[:, :, classes]
-        vlines = [[cf.value for cf in counterfactuals[feature]]
-                  for feature in features if feature in counterfactuals]
-        jitter = [feature in self.categorical_features for feature in features]
-        plot_feature_dependencies(s[:, features], color=color, color_label=color_feature_name, fill=fill,
+        vlines = []
+        if feature in counterfactuals:
+            vlines.append([cf.value for cf in counterfactuals[feature]])
+        jitter = [feature in self.categorical_features]
+        plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
                                   alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize, fig=fig, axs=axs)
 
     def plot_outcome_differences(self):
@@ -164,25 +176,6 @@ class Explanation:
             include_features = self.features_with_counterfactuals
         return counterfactuals_to_constraint_matrix(self.comparer.feature_names, self.feature_precisions,
                                                     include_features, self.counterfactuals)
-
-    def evaluate_rules(self, *rules):
-        r = RuleClassifier(self.comparer.feature_names, rules)
-        y_diffclf = self.highlight
-        y_expl = r.predict(self.data)
-        print(classification_report(y_diffclf, y_expl))
-        precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y_diffclf, y_expl, labels=r.classes_)
-        df = pd.DataFrame(np.array((precisions, recalls, f1_scores, supports)).T,
-                          columns=['Precision', 'Recall', 'F1 Score', 'Support'],
-                          index=r.classes_)
-        df['Support'] = df['Support'].astype(int)
-        return df
-        #cm = confusion_matrix(y_diffclf, y_expl, labels=[False, True])
-        #disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-        #fig, ax = plt.subplots(constrained_layout=True)
-        #disp.plot(ax=ax)
-        #ax.set_ylabel('difference classifier predictions')
-        #ax.set_xlabel('explanation\'s predictions')
-        #plt.show()
 
 
 class ExplanationNode(Explanation):
@@ -296,16 +289,88 @@ def plot_joint_feature_dependence(feature, **nodes):
         axs_row[0].set_ylabel(f'SHAP Value of {node_name}')
 
 
-def compare_indiv_dep_plots(node, feature, alpha=0.5):
-    fig, axs = plt.subplots(ncols=3, nrows=2, sharex='all', sharey='row', figsize=(3*7, 1.5*5), gridspec_kw={'height_ratios': [2,1]})
-    node.plot_feature_dependence(feature, classes=['A.0', 'A.1', 'A.2'], alpha=alpha*2/3, color=np.repeat(False, len(node.data)), fig=fig, axs=axs[0])
-    node.plot_feature_dependence(feature, classes=['B.0', 'B.1', 'B.2'], alpha=alpha*2/3, color=np.repeat(True, len(node.data)), fig=fig, axs=axs[0])
+def compare_indiv_dep_plots(node: ExplanationNode, feature=None, alpha=0.5):
+    if feature is None:
+        for feature in node.features_ordered:
+            _compare_indiv_dep_plots(node, feature, alpha)
+            plt.show()
+    else:
+        _compare_indiv_dep_plots(node, feature, alpha)
+
+
+def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5):
+    class_names_a, class_names_b = tuple([
+        [
+            class_name for class_name in node.shap_values.output_names if class_name.startswith(clf + '.')
+        ] for clf in ['A', 'B']
+    ])
+    fig, axs = plt.subplots(ncols=len(class_names_a), nrows=2, sharex='all', sharey='row', squeeze=False,
+                            figsize=(len(class_names_a) * 7, 1.5 * 5), gridspec_kw={'height_ratios': [2,1]})
+    for ax in axs[0]:
+        ax.axhline(0, linewidth=1, color='grey', alpha=0.5)
+    node.plot_feature_dependence(feature, classes=class_names_a, alpha=alpha*2/3, color=np.repeat(False, len(node.data)), fig=fig, axs=axs[0])
+    node.plot_feature_dependence(feature, classes=class_names_b, alpha=alpha*2/3, color=np.repeat(True, len(node.data)), fig=fig, axs=axs[0])
     for ax, label in zip(axs[0], node.comparer.base_class_names):
         ax.set_title(label)
     axs[1][0].set_ylabel('Difference')
-    for label, ax in zip(node.comparer.base_class_names, axs[1]):
-        diff = node.shap_values[:, feature, 'B.' + label].values - node.shap_values[:, feature, 'A.' + label].values
+    for class_name_a, class_name_b, ax in zip(class_names_a, class_names_b, axs[1]):
+        diff = node.shap_values[:, feature, class_name_b].values - node.shap_values[:, feature, class_name_a].values
         ax.scatter(node.data[feature], diff, alpha=alpha)
-        ax.axhline(0)
+        ax.axhline(0, linewidth=1, alpha=0.5)
         ax.set_xlabel(feature)
     plt.subplots_adjust(wspace=.0, hspace=.0)
+
+
+def plot_2d(node: ExplanationNode, x, y):
+    node.comparer.plot_decision_boundaries(node.root.data, type='bin-diffclf', x=x, y=y, alpha=0.5)
+    for cf in node.counterfactuals[x]:
+        plt.axvline(cf.value, linewidth=1, color='black', linestyle='--')
+    for cf in node.counterfactuals[y]:
+        plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
+
+
+def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, class_names):
+    feature_names = next(iter(explanations_per_class.values())).comparer.feature_names
+    metrics = []
+    for class_name, explanation in explanations_per_class.items():
+        nodes_per_level = _get_nodes_per_level(explanation)
+        for distance, nodes in nodes_per_level.items():
+            rules, constraints, _ = zip(*[node.rule_from_counterfactuals() for node in nodes])
+            rclf = RuleClassifier(feature_names, rules)
+            y_true = class_names[y_test] == class_name
+            metric = evaluate(rclf, X_test, y_true).iloc[1, :].copy()
+            metric['Label'] = class_name
+            metric['Nodes'] = len(nodes)
+            metric['Distance'] = distance
+            metric['Rules'] = len(rules)
+            metric['Constraints'] = np.sum(~np.isnan(constraints))
+            metrics.append(metric)
+    return pd.DataFrame(metrics).reset_index(drop=True)
+
+
+def _get_nodes_per_level(node):
+    distances = reversed(np.unique([node.distance for node in _nodes_flat(node)]))
+    nodes_per_level = [(distance, _cut_nodes(node, distance)) for distance in distances]
+    nodes_per_level = _filter_nodes_with_equal_distance(nodes_per_level)
+    return dict(nodes_per_level)
+
+
+def _filter_nodes_with_equal_distance(nodes_per_level):
+    return reversed(dict([(len(nodes), (distance, nodes)) for distance, nodes in reversed(nodes_per_level)]).values())
+
+
+def _nodes_flat(node: ExplanationNode):
+    children = [_nodes_flat(n) for n in [node.left, node.right] if n is not None and n.highlight.sum() > 0]
+    return [node] + [item for sublist in children for item in sublist]
+
+
+def _cut_nodes(node: ExplanationNode, min_distance):
+    if any([_has_focus_class_instances(n) and n.distance >= min_distance for n in [node.left, node.right]]):
+        children = [_cut_nodes(n, min_distance) for n in [node.left, node.right] if _has_focus_class_instances(n)]
+        return [item for sublist in children for item in sublist]
+    else:
+        return [node]
+
+
+def _has_focus_class_instances(n: ExplanationNode):
+    return n is not None and n.highlight.sum() > 0

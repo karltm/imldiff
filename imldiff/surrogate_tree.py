@@ -1,3 +1,5 @@
+from collections import Iterable
+
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -72,7 +74,7 @@ def get_node_ids_for_class(tree, class_idx):
     return nodes_with_focus_class[mask]
 
 
-def extract_rules(model, feature_names, classes_to_include, X, y):
+def extract_rules(model, feature_names, classes_to_include):
     constraints, class_occurences, labels, node_ids = tree_to_constraint_matrix(model)
     rules = constraint_matrix_to_rules(constraints, feature_names)
 
@@ -90,14 +92,7 @@ def extract_rules(model, feature_names, classes_to_include, X, y):
     constraints = constraints[rule_order]
     node_ids = np.array(node_ids)[rule_order]
 
-    pred_node_ids = model.apply(X)
-    instance_indices_per_rule = []
-    for node_id, label in zip(node_ids, labels):
-        mask = (pred_node_ids == node_id) & (y == label)
-        indices = np.where(mask)[0]
-        instance_indices_per_rule.append(indices)
-
-    return constraints, rules, class_occurences, labels, instance_indices_per_rule
+    return constraints, rules, class_occurences, labels
 
 
 def tree_to_rules(tree: DecisionTreeClassifier, feature_names, feature_order=None):
@@ -142,28 +137,30 @@ def print_rules(rules, class_occurences, class_names=None, labels=None):
         print(f'{idx}. {rule} => {class_names[label]} {class_occurences.astype(int).tolist()}')
 
 
-def search_max_depth_parameter(X, y_true, feature_names, class_names, start=2, stop=None, X_test=None, y_test=None):
-    classes = np.arange(len(class_names))
-    max_depth = start
-    parameters = []
+def eval_trees(trees: Iterable[DecisionTreeClassifier], feature_names, class_names, X_test=None, y_test=None):
+    classes = next(iter(trees)).classes_
     metrics = []
-    while stop is None or max_depth <= stop:
-        model = train_surrogate_tree(X, y_true, max_depth=max_depth)
-        constraints, rules, _, labels, _ = extract_rules(model, feature_names, classes, X, y_true)
-        results = evaluate(model, X_test, y_test, class_names)
+    for tree in trees:
+        constraints, rules, _, labels = extract_rules(tree, feature_names, classes)
+        results = evaluate(tree, X_test, y_test, class_names)
         for label in np.unique(labels):
-            result = results.loc[class_names[label]]
+            metric = results.loc[class_names[label]].copy()
             mask = labels == label
-            n_rules = np.sum(mask)
-            n_constraints = np.sum(~np.isnan(constraints[mask]))
-            parameters.append(max_depth)
-            metrics.append((class_names[label], result['Precision'], result['Recall'], result['F1 Score'], n_rules, n_constraints))
+            metric['Label'] = class_names[label]
+            metric['Leafs'] = tree.get_n_leaves()
+            metric['Alpha'] = tree.ccp_alpha
+            metric['Rules'] = np.sum(mask)
+            metric['Constraints'] = np.sum(~np.isnan(constraints[mask]))
+            metrics.append(metric)
+    return pd.DataFrame(metrics)
 
-        if max_depth > model.get_depth():
-            break
 
-        max_depth += 1
-
-    df = pd.DataFrame(metrics, columns=['Label', 'Precision', 'Recall', 'F1 Score', 'Rules', 'Constraints'])
-    df.insert(0, 'Depth', parameters)
-    return df
+def get_pruned_trees(tree, X_train, y_train):
+    path = tree.cost_complexity_pruning_path(X_train, y_train)
+    ccp_alphas, impurities = path.ccp_alphas[:-1], path.impurities[:-1]
+    trees = []
+    for ccp_alpha in reversed(ccp_alphas):
+        clf = DecisionTreeClassifier(random_state=0, ccp_alpha=ccp_alpha)
+        clf.fit(X_train, y_train)
+        trees.append(clf)
+    return trees

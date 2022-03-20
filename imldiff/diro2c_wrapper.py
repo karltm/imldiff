@@ -83,42 +83,6 @@ def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, high
     ax.legend()
 
 
-def search_max_depth_parameter(explanation, X, y_true, start=2, stop=None):
-    feature_names = get_feature_names(explanation)
-    indices = np.where(y_true)[0]
-    max_depth = start
-    parameters = []
-    metrics = []
-    while stop is None or max_depth <= stop:
-        train_surrogate_tree(explanation, max_depth=max_depth)
-        model = get_surrogate_tree(explanation)
-
-        constraints, rules, class_occurences, instance_indices_per_rule = extract_rules(explanation, X, y_true)
-
-        if len(rules) > 0:
-            rclf = RuleClassifier(feature_names, rules)
-            pred_rules = pd.Series(rclf.apply(X[indices]), index=indices)
-            pred_rules = pred_rules[pred_rules != 0]
-            rule_ids = np.unique(pred_rules) - 1
-            n_rules = len(rule_ids)
-            n_constraints = np.sum(~np.isnan(constraints[rule_ids]))
-
-            if n_rules > 0:
-                rclf = RuleClassifier(feature_names, np.array(rules)[rule_ids])
-                y_pred = rclf.predict(X)
-                precision, recall, _, _ = precision_recall_fscore_support(y_true, y_pred)
-
-                parameters.append(max_depth)
-                metrics.append((precision[1], recall[1], n_rules, n_constraints))
-
-        if max_depth > model.get_depth():
-            break
-
-        max_depth += 1
-
-    return pd.DataFrame(metrics, index=parameters, columns=['precision', 'recall', 'rules', 'constraints'])
-
-
 def train_surrogate_tree(explanation, max_depth=None):
     X, y = get_generated_data(explanation)
     model = surrogate_tree.train_surrogate_tree(X, y, max_depth)
@@ -141,40 +105,12 @@ def set_surrogate_tree(explanation, model):
     explanation['binary_diff_classifer']['dc_full'] = model
 
 
-def plot_surrogate_tree(explanation, precision=3, figsize=(14, 14), node_ids=False):
-    model = get_surrogate_tree(explanation)
-    feature_names = get_feature_names(explanation)
-    surrogate_tree.plot_surrogate_tree(model, feature_names, precision=precision, figsize=figsize, node_ids=node_ids)
-
-
 def get_surrogate_tree(explanation):
     return explanation['binary_diff_classifer']['dc_full']
 
 
 def get_feature_names(explanation):
     return explanation['binary_diff_classifer']['evaluation_info']['df_diff'].columns[1:].to_numpy()
-
-
-def get_feature_importances(explanation):
-    return surrogate_tree.get_feature_importances(get_surrogate_tree(explanation))
-
-
-def plot_feature_importances(explanation, feature_importances, feature_order, figsize=(5, 2)):
-    feature_names = get_feature_names(explanation)
-    surrogate_tree.plot_feature_importances(feature_names, feature_importances, feature_order, figsize)
-
-
-def extract_rules(explanation, X, y, label=1):
-    model = get_surrogate_tree(explanation)
-    feature_names = get_feature_names(explanation)
-    constraints, rules, class_occurences, _, instance_indices_per_rule =\
-        surrogate_tree.extract_rules(model, feature_names, [label], X, y)
-    return constraints, rules, class_occurences, instance_indices_per_rule
-
-
-def print_rules(rules, class_occurences):
-    for idx, (rule, class_occurences) in enumerate(zip(rules, class_occurences), 1):
-        print(f'{idx}. {rule} {class_occurences.astype(int).tolist()}')
 
 
 def evaluate_generated_data(explanation):
@@ -189,9 +125,19 @@ def evaluate(explanation, X, y):
     return surrogate_tree.evaluate(model, X, y)
 
 
-def plot_tree_leafs_2d(explanation, comparer, X, feature_x=0, feature_y=1, figsize=(7, 7)):
-    model = get_surrogate_tree(explanation)
-    class_names = [str(label) for label in model.classes_]
-    mclass_diff = comparer.predict_mclass_diff(X)
-    surrogate_tree.plot_tree_leafs_for_class(model, class_names, class_names[-1], X, mclass_diff, comparer.class_names,
-                                             comparer.feature_names, feature_x, feature_y, figsize)
+def get_pruned_trees(explanation):
+    tree = get_surrogate_tree(explanation)
+    X_train, y_train = get_generated_data(explanation)
+    return surrogate_tree.get_pruned_trees(tree, X_train, y_train)
+
+
+def eval_diro2c(explanation_per_class, X_test, y_test, class_names):
+    metrics = []
+    for class_name, explanation in explanation_per_class.items():
+        y_true = class_names[y_test] == class_name
+        trees = get_pruned_trees(explanation)
+        results = surrogate_tree.eval_trees(trees, get_feature_names(explanation), trees[0].classes_, X_test=X_test, y_test=y_true)
+        class_metrics = results.loc[1, :].copy()
+        class_metrics['Label'] = class_name
+        metrics.append(class_metrics)
+    return pd.concat(metrics)

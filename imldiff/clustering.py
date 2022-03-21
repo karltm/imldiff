@@ -5,36 +5,37 @@ from scipy.spatial import distance
 from scipy.cluster import hierarchy
 import matplotlib.pyplot as plt
 import seaborn as sns
-from explainers import plot_feature_dependencies, calc_feature_order, plot_feature_dependence
+from explainers import plot_feature_dependencies, calc_feature_order
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, \
     counterfactuals_to_constraint_matrix, evaluate
-from sklearn.metrics import classification_report, precision_recall_fscore_support
 
 
 class Explanation:
-    def __init__(self, comparer, orig_shap_values, instance_indices, cluster_classes, orig_pred_classes,
-                 categorical_features, feature_precisions, orig_highlight, focus_class=None, parent=None):
+    def __init__(self, comparer, shap_values, instance_indices, cluster_classes, pred_classes, categorical_features,
+                 feature_precisions, highlight, focus_class=None, parent=None, counterfactuals=None):
         self.comparer = comparer
         self.parent = parent
         self.root = self if parent is None else parent.root
         self.instance_indices = instance_indices
-        self.orig_shap_values = orig_shap_values
-        self.shap_values = orig_shap_values[instance_indices]
+        self.orig_shap_values = shap_values
+        self.shap_values = shap_values[instance_indices]
         self.data = pd.DataFrame(self.shap_values.data, columns=self.shap_values.feature_names, index=instance_indices)
         self.focus_class = focus_class
         self.feature_precisions = feature_precisions
-        self.orig_highlight = orig_highlight
-        self.highlight = orig_highlight[instance_indices]
+        self.orig_highlight = highlight
+        self.highlight = highlight[instance_indices]
         self.cluster_classes = cluster_classes
         self.categorical_features = categorical_features
-        self.orig_pred_classes = orig_pred_classes
-        self.pred_classes = orig_pred_classes[instance_indices]
+        self.orig_pred_classes = pred_classes
+        self.pred_classes = pred_classes[instance_indices]
         self.class_counts = pd.Series(self.pred_classes).value_counts()
         self._calculate_feature_order()
-        if parent is not None and self.class_counts.get(self.focus_class) == parent.class_counts.get(self.focus_class):
-            self.counterfactuals = parent.counterfactuals
-        else:
+        self.counterfactuals = counterfactuals[str(self)] if counterfactuals is not None else (
+            parent.counterfactuals if parent is not None and
+                                      self.class_counts.get(self.focus_class) ==
+                                      parent.class_counts.get(self.focus_class) else
             self._calculate_counterfactuals()
+        )
 
     @property
     def features_ordered(self):
@@ -52,12 +53,13 @@ class Explanation:
         self.feature_order, self.feature_importances = calc_feature_order(self.shap_values)
 
     def _calculate_counterfactuals(self):
-        self.counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
+        counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
         if np.sum(self.highlight) == 0 or self.focus_class is None:
-            return
-        self.counterfactuals |= find_counterfactuals(self.comparer, self.data.iloc[self.highlight].to_numpy(),
+            return counterfactuals
+        counterfactuals |= find_counterfactuals(self.comparer, self.data.iloc[self.highlight].to_numpy(),
                                                      self.root.data.to_numpy(), self.feature_precisions,
                                                      list(self.comparer.class_names).index(self.focus_class))
+        return counterfactuals
 
     def describe_feature_differences(self, feature):
         feature_idx, feature_name = self.comparer.check_feature(feature)
@@ -121,6 +123,13 @@ class Explanation:
         plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
                                   alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize, fig=fig, axs=axs)
 
+    def plot_outcomes(self):
+        y_pred = self.shap_values.base_values + self.shap_values.values.sum(1)
+        index = pd.Index(self.pred_classes, name='Label')
+        y_pred = pd.DataFrame(y_pred, columns=self.comparer.class_names, index=index).reset_index()
+        df = pd.melt(y_pred, value_vars=self.comparer.class_names, id_vars='Label')
+        sns.stripplot(data=df, x='variable', y='value', hue='Label', hue_order=self.comparer.class_names, dodge=True)
+
     def plot_outcome_differences(self):
         focus_class_idx = list(self.comparer.class_names).index(self.focus_class)
         other_classes = [class_ for class_ in self.cluster_classes if class_ != self.focus_class]
@@ -179,12 +188,12 @@ class Explanation:
 
 
 class ExplanationNode(Explanation):
-    def __init__(self, comparer, orig_shap_values, cluster_node, instance_indices, cluster_classes, orig_pred_classes,
-                 distance_matrix, linkage_matrix, categorical_features, feature_precisions, orig_highlight,
-                 focus_class=None, parent=None):
-        super(ExplanationNode, self).__init__(comparer, orig_shap_values, instance_indices, cluster_classes,
-                                              orig_pred_classes, categorical_features, feature_precisions,
-                                              orig_highlight, focus_class, parent)
+    def __init__(self, comparer, shap_values, cluster_node, instance_indices, cluster_classes, pred_classes,
+                 distance_matrix, linkage_matrix, categorical_features, feature_precisions, highlight,
+                 focus_class=None, parent=None, counterfactuals=None):
+        super(ExplanationNode, self).__init__(comparer, shap_values, instance_indices, cluster_classes,
+                                              pred_classes, categorical_features, feature_precisions,
+                                              highlight, focus_class, parent, counterfactuals)
         self.cluster_node = cluster_node
         self.distance_matrix = distance_matrix
         self.linkage_matrix = linkage_matrix
@@ -205,6 +214,26 @@ class ExplanationNode(Explanation):
     def distance(self):
         """Distance for this cluster in the distance matrix (metric='sqeuclidean')"""
         return self.cluster_node.dist
+
+    @property
+    def state(self):
+        return {
+            'cluster_node': self.cluster_node,
+            'instance_indices': self.instance_indices,
+            'pred_classes': self.orig_pred_classes,
+            'distance_matrix': self.distance_matrix,
+            'linkage_matrix': self.linkage_matrix,
+            'highlight': self.orig_highlight,
+            'counterfactuals': self._get_all_counterfactuals()
+        }
+
+    def _get_all_counterfactuals(self):
+        childs = [n for n in [self.left, self.right] if n is not None]
+        child_cfs = [child._get_all_counterfactuals() for child in childs]
+        child_cfs = [item for sublist in child_cfs for item in sublist]
+        child_cfs = [(str(self), self.counterfactuals)] + child_cfs
+        child_cfs = dict(child_cfs)
+        return child_cfs
 
     def __repr__(self):
         if self.parent is None:
@@ -254,27 +283,31 @@ class ExplanationNode(Explanation):
 
 
 def make_clustering(comparer, shap_values, focus_class=None, cluster_classes=None, categorical_features=None,
-                    feature_precisions=None):
+                    feature_precisions=None, state=None):
     if cluster_classes is None:
         cluster_classes = shap_values.output_names
     if categorical_features is None:
         categorical_features = []
     if feature_precisions is None:
         feature_precisions = [0 for _ in range(len(comparer.feature_names))]
+    if state is not None:
+        return ExplanationNode(comparer, shap_values, cluster_classes=cluster_classes, focus_class=focus_class,
+                               categorical_features=categorical_features, feature_precisions=feature_precisions, **state)
     values = shap_values[:, :, cluster_classes].values
     values = values.reshape((values.shape[0], values.shape[1] * values.shape[2]))
-    D = distance.pdist(values, metric='sqeuclidean')
-    Z = hierarchy.complete(D)
-    cluster_root = hierarchy.to_tree(Z)
-    instance_indices = np.array(cluster_root.pre_order())
+    distance_matrix = distance.pdist(values, metric='sqeuclidean')
+    linkage_matrix = hierarchy.complete(distance_matrix)
+    cluster_node = hierarchy.to_tree(linkage_matrix)
+    instance_indices = np.array(cluster_node.pre_order())
     pred_classes = comparer.predict_mclass_diff(shap_values.data)
     pred_classes = comparer.class_names[pred_classes]
     if focus_class is not None:
         highlight = pred_classes == focus_class
     else:
         highlight = comparer.predict_bin_diff(shap_values.data)
-    node = ExplanationNode(comparer, shap_values, cluster_root, instance_indices, cluster_classes, pred_classes, D, Z,
-                           categorical_features, feature_precisions, highlight, focus_class)
+    node = ExplanationNode(comparer, shap_values, cluster_node, instance_indices, cluster_classes, pred_classes,
+                           distance_matrix, linkage_matrix, categorical_features, feature_precisions, highlight,
+                           focus_class)
     return node
 
 

@@ -1,3 +1,4 @@
+import pandas as pd
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
 import numpy as np
@@ -188,6 +189,7 @@ class ModelComparer:
 
     def plot_decision_boundaries(self, X, X_display=None, kind='label', x=0, y=1,
                                  xlim=None, ylim=None, zlim=None, type='mclass-diffclf', fig=None, ax=None, **kwargs):
+        X = X.to_numpy() if isinstance(X, pd.DataFrame) else X
         x_idx, x_name = self.check_feature(x)
         y_idx, y_name = self.check_feature(y)
 

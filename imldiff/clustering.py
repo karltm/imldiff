@@ -343,8 +343,10 @@ def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5):
                             figsize=(len(class_names_a) * 7, 1.5 * 5), gridspec_kw={'height_ratios': [2,1]})
     for ax in axs[0]:
         ax.axhline(0, linewidth=1, color='grey', alpha=0.5)
-    node.plot_feature_dependence(feature, classes=class_names_a, alpha=alpha*2/3, color=np.repeat(False, len(node.data)), fig=fig, axs=axs[0])
-    node.plot_feature_dependence(feature, classes=class_names_b, alpha=alpha*2/3, color=np.repeat(True, len(node.data)), fig=fig, axs=axs[0])
+    node.plot_feature_dependence(feature, classes=class_names_a, alpha=alpha*2/3, color=np.repeat(False, len(node.data)),
+                                 fig=fig, axs=axs[0], show=False)
+    node.plot_feature_dependence(feature, classes=class_names_b, alpha=alpha*2/3, color=np.repeat(True, len(node.data)),
+                                 fig=fig, axs=axs[0], show=False)
     for ax, label in zip(axs[0], node.comparer.base_class_names):
         ax.set_title(label)
     axs[1][0].set_ylabel('Difference')
@@ -365,30 +367,35 @@ def plot_2d(node: ExplanationNode, x, y):
 
 
 def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, shap_values_test, class_names):
-    comparer = next(iter(explanations_per_class.values())).comparer
     metrics = []
     for class_name, explanation in explanations_per_class.items():
-        y_true = comparer.class_names[y_test] == class_name
         for distance, nodes in _get_nodes_per_level(explanation).items():
-            discr = _make_cluster_discriminator(nodes)
-            pred_cluster_names = discr.predict(shap_values_test.values.reshape((shap_values_test.shape[0], -1)))
-            nodes = dict([(str(node), node) for node in nodes])
-            y_pred = np.repeat(False, len(y_test))
-            constraints = []
-            for cluster_name in np.unique(pred_cluster_names):
-                mask = pred_cluster_names == cluster_name
-                node = nodes[cluster_name]
-                rule, constraint, _ = node.rule_from_counterfactuals()
-                constraints.append(constraint)
-                rclf = RuleClassifier(comparer.feature_names, [rule])
-                y_pred[mask] = rclf.predict(X_test[mask])
-            metric = evaluate_predictions(y_true, y_pred, [False, True], [False, True]).iloc[1, :].copy()
-            metric['Label'] = class_name
-            metric['Nodes'] = len(nodes)
+            metric = eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_test)
             metric['Distance'] = distance
-            metric['Constraints'] = np.sum(~np.isnan(constraints))
             metrics.append(metric)
     return pd.DataFrame(metrics).reset_index(drop=True)
+
+
+def eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_test):
+    discr = _make_cluster_discriminator(nodes)
+    pred_cluster_names = discr.predict(shap_values_test.values.reshape((shap_values_test.shape[0], -1)))
+    comparer = next(iter(nodes)).comparer
+    nodes = dict([(str(node), node) for node in nodes])
+    y_pred = np.repeat(False, len(y_test))
+    constraints = []
+    for cluster_name in np.unique(pred_cluster_names):
+        mask = pred_cluster_names == cluster_name
+        node = nodes[cluster_name]
+        rule, constraint, _ = node.rule_from_counterfactuals()
+        constraints.append(constraint)
+        rclf = RuleClassifier(comparer.feature_names, [rule])
+        y_pred[mask] = rclf.predict(X_test[mask])
+    y_true = comparer.class_names[y_test] == class_name
+    metric = evaluate_predictions(y_true, y_pred, [False, True], [False, True]).iloc[1, :].copy()
+    metric['Label'] = class_name
+    metric['Nodes'] = len(nodes)
+    metric['Constraints'] = np.sum(~np.isnan(constraints))
+    return metric
 
 
 def _get_nodes_per_level(node):

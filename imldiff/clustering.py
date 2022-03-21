@@ -8,6 +8,8 @@ import seaborn as sns
 from explainers import plot_feature_dependencies, calc_feature_order
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, \
     counterfactuals_to_constraint_matrix, evaluate
+from util import evaluate_predictions
+from sklearn.neighbors import KNeighborsClassifier
 
 
 class Explanation:
@@ -362,20 +364,28 @@ def plot_2d(node: ExplanationNode, x, y):
         plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
 
 
-def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, class_names):
-    feature_names = next(iter(explanations_per_class.values())).comparer.feature_names
+def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, shap_values_test, class_names):
+    comparer = next(iter(explanations_per_class.values())).comparer
     metrics = []
     for class_name, explanation in explanations_per_class.items():
-        nodes_per_level = _get_nodes_per_level(explanation)
-        for distance, nodes in nodes_per_level.items():
-            rules, constraints, _ = zip(*[node.rule_from_counterfactuals() for node in nodes])
-            rclf = RuleClassifier(feature_names, rules)
-            y_true = class_names[y_test] == class_name
-            metric = evaluate(rclf, X_test, y_true).iloc[1, :].copy()
+        y_true = comparer.class_names[y_test] == class_name
+        for distance, nodes in _get_nodes_per_level(explanation).items():
+            discr = _make_cluster_discriminator(nodes)
+            pred_cluster_names = discr.predict(shap_values_test.values.reshape((shap_values_test.shape[0], -1)))
+            nodes = dict([(str(node), node) for node in nodes])
+            y_pred = np.repeat(False, len(y_test))
+            constraints = []
+            for cluster_name in np.unique(pred_cluster_names):
+                mask = pred_cluster_names == cluster_name
+                node = nodes[cluster_name]
+                rule, constraint, _ = node.rule_from_counterfactuals()
+                constraints.append(constraint)
+                rclf = RuleClassifier(comparer.feature_names, [rule])
+                y_pred[mask] = rclf.predict(X_test[mask])
+            metric = evaluate_predictions(y_true, y_pred, [False, True], [False, True]).iloc[1, :].copy()
             metric['Label'] = class_name
             metric['Nodes'] = len(nodes)
             metric['Distance'] = distance
-            metric['Rules'] = len(rules)
             metric['Constraints'] = np.sum(~np.isnan(constraints))
             metrics.append(metric)
     return pd.DataFrame(metrics).reset_index(drop=True)
@@ -386,6 +396,14 @@ def _get_nodes_per_level(node):
     nodes_per_level = [(distance, _cut_nodes(node, distance)) for distance in distances]
     nodes_per_level = _filter_nodes_with_equal_distance(nodes_per_level)
     return dict(nodes_per_level)
+
+
+def _make_cluster_discriminator(nodes):
+    X = np.concatenate([node.shap_values.values.reshape((node.shap_values.shape[0], -1)) for node in nodes])
+    y = np.concatenate([np.repeat(str(node), len(node.shap_values.values)) for node in nodes])
+    knn = KNeighborsClassifier(n_neighbors=1)
+    knn.fit(X, y)
+    return knn
 
 
 def _filter_nodes_with_equal_distance(nodes_per_level):

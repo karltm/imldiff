@@ -136,6 +136,8 @@ def eval_diro2c(explanation_per_class, X_test, y_test, class_names):
     for class_name, explanation in explanation_per_class.items():
         y_true = class_names[y_test] == class_name
         trees = get_pruned_trees(explanation)
+        if len(trees) == 0:
+            continue
         results = surrogate_tree.eval_trees(trees, get_feature_names(explanation), trees[0].classes_, X_test=X_test, y_test=y_true)
         class_metrics = results.loc[1, :].copy()
         class_metrics['Label'] = class_name

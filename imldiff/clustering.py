@@ -191,16 +191,16 @@ class ExplanationNode(Explanation):
     def __init__(self, comparer, shap_values, cluster_node, instance_indices, cluster_classes, pred_classes,
                  distance_matrix, linkage_matrix, categorical_features, feature_precisions, highlight,
                  focus_class=None, parent=None, counterfactuals=None):
-        super(ExplanationNode, self).__init__(comparer, shap_values, instance_indices, cluster_classes,
-                                              pred_classes, categorical_features, feature_precisions,
-                                              highlight, focus_class, parent, counterfactuals)
         self.cluster_node = cluster_node
         self.distance_matrix = distance_matrix
         self.linkage_matrix = linkage_matrix
-        self.left = self._make_child(self.cluster_node.get_left())
-        self.right = self._make_child(self.cluster_node.get_right())
+        super(ExplanationNode, self).__init__(comparer, shap_values, instance_indices, cluster_classes,
+                                              pred_classes, categorical_features, feature_precisions,
+                                              highlight, focus_class, parent, counterfactuals)
+        self.left = self._make_child(self.cluster_node.get_left(), counterfactuals)
+        self.right = self._make_child(self.cluster_node.get_right(), counterfactuals)
 
-    def _make_child(self, cluster_node):
+    def _make_child(self, cluster_node, counterfactuals=None):
         if self.distance == 0.0:
             return None
         if cluster_node is None:
@@ -208,7 +208,7 @@ class ExplanationNode(Explanation):
         instance_indices = np.array(cluster_node.pre_order())
         return ExplanationNode(self.comparer, self.orig_shap_values, cluster_node, instance_indices, self.cluster_classes,
                                self.orig_pred_classes, self.distance_matrix, self.linkage_matrix, self.categorical_features,
-                               self.feature_precisions, self.orig_highlight, self.focus_class, self)
+                               self.feature_precisions, self.orig_highlight, self.focus_class, self, counterfactuals)
 
     @property
     def distance(self):
@@ -229,7 +229,7 @@ class ExplanationNode(Explanation):
 
     def _get_all_counterfactuals(self):
         childs = [n for n in [self.left, self.right] if n is not None]
-        child_cfs = [child._get_all_counterfactuals() for child in childs]
+        child_cfs = [child._get_all_counterfactuals().items() for child in childs]
         child_cfs = [item for sublist in child_cfs for item in sublist]
         child_cfs = [(str(self), self.counterfactuals)] + child_cfs
         child_cfs = dict(child_cfs)

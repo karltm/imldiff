@@ -324,24 +324,22 @@ class RuleClassifier(BaseEstimator, ClassifierMixin):
 
 def evaluate(model, X, y, class_names=None):
     if class_names is None:
-        target_names = [str(label) for label in model.classes_]
+        class_names = [str(label) for label in model.classes_]
     else:
-        target_names = np.array(class_names)[model.classes_]
+        class_names = np.array(class_names)[model.classes_]
     y_pred = model.predict(X)
-    # print(classification_report(y, y_pred, target_names=target_names, labels=model.classes_))
-    precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y, y_pred, labels=model.classes_)
+    classes = model.classes_
+    df = evaluate_predictions(y, y_pred, classes, class_names)
+    return df
+
+
+def evaluate_predictions(y, y_pred, classes, class_names):
+    precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y, y_pred, labels=classes)
     df = pd.DataFrame(np.array((precisions, recalls, f1_scores, supports)).T,
                       columns=['Precision', 'Recall', 'F1 Score', 'Support'],
-                      index=target_names)
+                      index=class_names)
     df['Support'] = df['Support'].astype(int)
     return df
-    #cm = confusion_matrix(y, y_pred, labels=model.classes_)
-    #disp = ConfusionMatrixDisplay(confusion_matrix=cm)
-    #fig, ax = plt.subplots(constrained_layout=True)
-    #disp.plot(ax=ax)
-    #ax.set_ylabel('difference classifier predictions')
-    #ax.set_xlabel('explanation\'s predictions')
-    #plt.show()
 
 
 def group_metrics(metrics, by: str, direction='up'):

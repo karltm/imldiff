@@ -135,3 +135,4 @@ src/version.ts
 *old/
 /notebooks/Benchmark Setting/Binary Classification/Adult Dataset/diro2c-datasets/dell.zip
 /notebooks/Benchmark Setting/Binary Classification/Adult Dataset/diro2c-datasets/server.tgz
+*.pdf

@@ -95,9 +95,9 @@ def extract_rules(model, feature_names, classes_to_include):
     return constraints, rules, class_occurences, labels
 
 
-def tree_to_rules(tree: DecisionTreeClassifier, feature_names, feature_order=None):
+def tree_to_rules(tree: DecisionTreeClassifier, feature_names, feature_order=None, precisions=None, latex=False):
     constraints, class_occurences, labels, node_ids = tree_to_constraint_matrix(tree)
-    rules = constraint_matrix_to_rules(constraints, feature_names, feature_order)
+    rules = constraint_matrix_to_rules(constraints, feature_names, feature_order, precisions, latex)
     return rules, class_occurences, labels, node_ids
 
 

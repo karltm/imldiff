@@ -407,3 +407,16 @@ def _cut_nodes(node: ExplanationNode, min_distance):
 
 def _has_focus_class_instances(n: ExplanationNode):
     return n is not None and n.highlight.sum() > 0
+
+
+def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1):
+    X = node.root.data
+    comparer = node.comparer
+    x, y = comparer.check_feature(x)[1], comparer.check_feature(y)[1]
+    xlim = X[x].min() - 0.5, X[x].max() + 0.5
+    ylim = X[y].min() - 0.5, X[y].max() + 0.5
+    comparer.plot_decision_boundaries(node.data, xlim=xlim, ylim=ylim)
+    for cf in node.counterfactuals['x1']:
+        plt.axvline(cf.value, linewidth=1, color='black', linestyle='--')
+    for cf in node.counterfactuals['x2']:
+        plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')

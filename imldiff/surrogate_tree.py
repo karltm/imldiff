@@ -38,16 +38,16 @@ def plot_surrogate_tree(model, feature_names, class_names=None, precision=3, fig
               class_names=np.array(class_names)[model.classes_], node_ids=node_ids)
 
 
-def plot_tree_leafs_for_class(tree, tree_class_names, focus_classes, X, y, class_names, feature_names,
+def plot_tree_leafs_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
                               feature_x=0, feature_y=1, figsize=(7, 7)):
-    if isinstance(focus_classes, str):
-        focus_classes = [focus_classes]
+    if isinstance(tree_focus_class_names, str):
+        tree_focus_class_names = [tree_focus_class_names]
     if isinstance(feature_x, str):
         feature_x = list(feature_names).index(feature_x)
     if isinstance(feature_y, str):
         feature_y = list(feature_names).index(feature_y)
-    focus_class_indices = [list(tree_class_names).index(focus_class) for focus_class in focus_classes]
-    node_ids = [get_node_ids_for_class(tree, focus_class_idx).tolist() for focus_class_idx in focus_class_indices]
+    focus_class_indices = [list(tree_class_names).index(label) for label in tree_focus_class_names]
+    node_ids = [get_node_ids_for_class(tree, idx).tolist() for idx in focus_class_indices]
     node_ids = _flatten(node_ids)
     mapping = dict(zip(node_ids, range(1, len(node_ids)+1)))
 

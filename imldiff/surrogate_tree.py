@@ -162,5 +162,7 @@ def get_pruned_trees(tree, X_train, y_train):
     for ccp_alpha in reversed(ccp_alphas):
         clf = DecisionTreeClassifier(random_state=0, ccp_alpha=ccp_alpha)
         clf.fit(X_train, y_train)
+        if len(trees) > 0 and clf.get_n_leaves() == trees[-1].get_n_leaves():
+            continue
         trees.append(clf)
     return trees

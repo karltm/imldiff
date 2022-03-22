@@ -95,8 +95,9 @@ class Explanation:
             features = self.features_ordered
         for feature in features:
             if print_stats:
-                self.describe_feature_differences(feature)
-                pprint(self.counterfactuals[feature])
+                node = focus if focus is not None else self
+                node.describe_feature_differences(feature)
+                pprint(node.counterfactuals[feature])
             self._plot_feature_dependence(feature, classes, alpha, color, fill, focus, figsize, fig, axs)
             if show:
                 plt.show()

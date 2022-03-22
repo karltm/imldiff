@@ -134,7 +134,7 @@ def get_pruned_trees(explanation):
 def eval_diro2c(explanation_per_class, X_test, y_test, class_names):
     metrics = []
     for class_name, explanation in explanation_per_class.items():
-        y_true = class_names[y_test] == class_name
+        y_true = class_names[y_test.astype(int)] == class_name
         trees = get_pruned_trees(explanation)
         if len(trees) == 0:
             continue

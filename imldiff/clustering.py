@@ -91,11 +91,11 @@ class Explanation:
 
     def plot_feature_dependence(self, *features, classes=None, alpha=0.5, color=None, fill=None, focus=None,
                                 figsize=None, fig=None, axs=None, print_stats=False, show=True):
+        node = focus if focus is not None else self
         if len(features) == 0:
-            features = self.features_ordered
+            features = node.features_ordered
         for feature in features:
             if print_stats:
-                node = focus if focus is not None else self
                 node.describe_feature_differences(feature)
                 pprint(node.counterfactuals[feature])
             self._plot_feature_dependence(feature, classes, alpha, color, fill, focus, figsize, fig, axs)
@@ -126,16 +126,20 @@ class Explanation:
         plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
                                   alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize, fig=fig, axs=axs)
 
-    def plot_outcomes(self):
+    def plot_outcomes(self, classes=None, ax=None):
+        classes = classes if classes is not None else self.cluster_classes
         y_pred = self.shap_values.base_values + self.shap_values.values.sum(1)
+        class_mask = np.in1d(self.shap_values.output_names, classes)
+        y_pred = y_pred[:, class_mask]
         index = pd.Index(self.pred_classes, name='Label')
-        y_pred = pd.DataFrame(y_pred, columns=self.comparer.class_names, index=index).reset_index()
-        df = pd.melt(y_pred, value_vars=self.comparer.class_names, id_vars='Label')
-        sns.stripplot(data=df, x='variable', y='value', hue='Label', hue_order=self.comparer.class_names, dodge=True)
+        y_pred = pd.DataFrame(y_pred, columns=classes, index=index).reset_index()
+        df = pd.melt(y_pred, value_vars=classes, id_vars='Label')
+        legend_labels = self.comparer.class_names[np.in1d(self.comparer.class_names, np.unique(self.pred_classes))]
+        sns.stripplot(data=df, x='variable', y='value', hue='Label', hue_order=legend_labels, dodge=True, ax=ax)
 
-    def plot_outcome_differences(self):
+    def plot_outcome_differences(self, classes=None):
         focus_class_idx = list(self.comparer.class_names).index(self.focus_class)
-        other_classes = [class_ for class_ in self.cluster_classes if class_ != self.focus_class]
+        other_classes = classes if classes is not None else [class_ for class_ in self.cluster_classes if class_ != self.focus_class]
         other_class_indices = [list(self.comparer.class_names).index(class_) for class_ in other_classes]
         s = self.shap_values
         log_odds_per_class = s.base_values + s.values.sum(1)

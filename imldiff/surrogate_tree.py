@@ -74,9 +74,9 @@ def get_node_ids_for_class(tree, class_idx):
     return nodes_with_focus_class[mask]
 
 
-def extract_rules(model, feature_names, classes_to_include):
+def extract_rules(model, feature_names, classes_to_include, feature_order=None, precisions=None, latex=False):
     constraints, class_occurences, labels, node_ids = tree_to_constraint_matrix(model)
-    rules = constraint_matrix_to_rules(constraints, feature_names)
+    rules = constraint_matrix_to_rules(constraints, feature_names, feature_order, precisions, latex)
 
     mask = np.in1d(labels, classes_to_include)
     rules = np.array(rules)[mask].tolist()

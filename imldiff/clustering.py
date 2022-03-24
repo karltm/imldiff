@@ -179,11 +179,12 @@ class Explanation:
                 feature_data,
                 feature_data.iloc[self.highlight]]).T.describe()
 
-    def rule_from_counterfactuals(self, *include_features):
+    def rule_from_counterfactuals(self, *include_features, latex=False):
         if len(include_features) == 0:
             include_features = self.features_with_counterfactuals
         constraint = self.constraint_matrix_from_counterfactuals(*include_features)
-        rules = constraint_matrix_to_rules([constraint], self.comparer.feature_names, self.feature_order)
+        rules = constraint_matrix_to_rules([constraint], self.comparer.feature_names, self.feature_order,
+                                           self.feature_precisions, latex)
         instance_indices = self.instance_indices[self.highlight]
         return rules[0], constraint, instance_indices
 

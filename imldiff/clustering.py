@@ -339,10 +339,10 @@ def compare_indiv_dep_plots(node: ExplanationNode, feature=None, alpha=0.5):
 
 
 def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5):
+    class_names = [class_name for class_name in node.comparer.base_class_names
+                   if any([n.endswith('.' + class_name) for n in node.shap_values.output_names])]
     class_names_a, class_names_b = tuple([
-        [
-            class_name for class_name in node.shap_values.output_names if class_name.startswith(clf + '.')
-        ] for clf in ['A', 'B']
+        [clf + '.' + class_name for class_name in class_names] for clf in ['A', 'B']
     ])
     fig, axs = plt.subplots(ncols=len(class_names_a), nrows=2, sharex='all', sharey='row', squeeze=False,
                             figsize=(len(class_names_a) * 7, 1.5 * 5), gridspec_kw={'height_ratios': [2,1]})
@@ -352,7 +352,7 @@ def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5):
                                  fig=fig, axs=axs[0], show=False)
     node.plot_feature_dependence(feature, classes=class_names_b, alpha=alpha*2/3, color=np.repeat(True, len(node.data)),
                                  fig=fig, axs=axs[0], show=False)
-    for ax, label in zip(axs[0], node.comparer.base_class_names):
+    for ax, label in zip(axs[0], class_names):
         ax.set_title(label)
     axs[1][0].set_ylabel('Difference')
     for class_name_a, class_name_b, ax in zip(class_names_a, class_names_b, axs[1]):

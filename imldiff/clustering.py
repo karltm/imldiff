@@ -119,12 +119,10 @@ class Explanation:
             color_feature_idx, color_feature_name = self.comparer.check_feature(color)
             color = self.data.iloc[:, color_feature_idx]
         s = self.shap_values[:, :, classes]
-        vlines = []
-        if feature in counterfactuals:
-            vlines.append([cf.value for cf in counterfactuals[feature]])
-        jitter = [feature in self.categorical_features]
         plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
-                                  alpha=alpha, jitter=jitter, vlines=vlines, figsize=figsize, fig=fig, axs=axs)
+                                  alpha=alpha, jitter=feature in self.categorical_features,
+                                  vlines=[cf.value for cf in counterfactuals.get(feature) if cf], figsize=figsize,
+                                  fig=fig, axs=axs)
 
     def plot_outcomes(self, classes=None, ax=None):
         classes = classes if classes is not None else self.cluster_classes
@@ -354,6 +352,7 @@ def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5):
                                  fig=fig, axs=axs[0], show=False)
     for ax, label in zip(axs[0], class_names):
         ax.set_title(label)
+    axs[0][-1].legend(['A', 'B'])
     axs[1][0].set_ylabel('Difference')
     for class_name_a, class_name_b, ax in zip(class_names_a, class_names_b, axs[1]):
         diff = node.shap_values[:, feature, class_name_b].values - node.shap_values[:, feature, class_name_a].values

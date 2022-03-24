@@ -357,8 +357,8 @@ def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=No
             sc = plot_feature_dependence(shap_values[:, :, class_name], feature, color=color, fill=fill, alpha=alpha,
                                           ax=ax,
                                           title=class_name if row_idx == 0 else None,
-                                          jitter=jitter[row_idx] if jitter is not None else None,
-                                          vlines=vlines[row_idx] if vlines is not None else None)
+                                          jitter=jitter,
+                                          vlines=vlines)
             if col_idx > 0:
                 ax.set_ylabel(None)
                 plt.setp(ax.get_yticklabels(), visible=False)

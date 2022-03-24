@@ -379,7 +379,7 @@ def plot_2d(node: ExplanationNode, x, y):
 def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, shap_values_test, class_names):
     metrics = []
     for class_name, explanation in explanations_per_class.items():
-        for distance, nodes in _get_nodes_per_level(explanation).items():
+        for distance, nodes in get_nodes_per_level(explanation).items():
             metric = eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_test)
             metric['Distance'] = distance
             metrics.append(metric)
@@ -408,7 +408,7 @@ def eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_te
     return metric
 
 
-def _get_nodes_per_level(node):
+def get_nodes_per_level(node):
     distances = reversed(np.unique([node.distance for node in _nodes_flat(node)]))
     nodes_per_level = [(distance, _cut_nodes(node, distance)) for distance in distances]
     nodes_per_level = _filter_nodes_with_equal_distance(nodes_per_level)

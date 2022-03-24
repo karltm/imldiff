@@ -366,6 +366,7 @@ def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=No
     plt.subplots_adjust(wspace=.0)
     if color_label is not None and sc is not None:
         fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
+    return sc
 
 
 def plot_feature_dependence(shap_values, feature, title=None, color=None, color_label=None, fill=None, alpha=None,

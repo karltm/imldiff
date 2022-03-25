@@ -179,14 +179,14 @@ class Explanation:
                 feature_data,
                 feature_data.iloc[self.highlight]]).T.describe()
 
-    def rule_from_counterfactuals(self, *include_features, latex=False):
-        if len(include_features) == 0:
-            include_features = self.features_with_counterfactuals
+    def rule_from_counterfactuals(self, *include_features, order=None, latex=False):
+        include_features = self.features_with_counterfactuals if len(include_features) == 0 else include_features
+        order = self.feature_order if order is None else order
+
         constraint = self.constraint_matrix_from_counterfactuals(*include_features)
-        rules = constraint_matrix_to_rules([constraint], self.comparer.feature_names, self.feature_order,
-                                           self.feature_precisions, latex)
+        rule = constraint_matrix_to_rules([constraint], self.comparer.feature_names, order, self.feature_precisions, latex)[0]
         instance_indices = self.instance_indices[self.highlight]
-        return rules[0], constraint, instance_indices
+        return rule, constraint, instance_indices
 
     def constraint_matrix_from_counterfactuals(self, *include_features):
         if len(include_features) == 0:
@@ -322,16 +322,21 @@ def make_clustering(comparer, shap_values, focus_class=None, cluster_classes=Non
 get_node_path = lambda node: get_node_path(node.parent) + [node] if node is not None else []
 
 
-def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2.5), **nodes):
-    if classes is None:
-        classes = next(iter(nodes.values())).cluster_classes
+def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2), with_context=False, **nodes):
+    classes = next(iter(nodes.values())).cluster_classes if classes is None else classes
+    context_nodes = nodes.values()
+    focus_nodes = [node.get_last_child_before_focus_class_split() for node in nodes.values()] if with_context else nodes.values()
+
     ncols = len(classes)
     nrows = len(nodes)
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * figsize[0], nrows * figsize[1]), sharex='all', sharey='all')
-    for (node_name, node), axs_row in zip(nodes.items(), axs):
-        node.plot_feature_dependence(feature, classes=classes, fig=fig, axs=axs_row, show=False)
-        plt.subplots_adjust(wspace=.0, hspace=.0)
-        axs_row[0].set_ylabel(f'SHAP Value of {node_name}')
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * figsize[0], nrows * figsize[1]), sharex='all', sharey='all', squeeze=False)
+    for node_name, context_node, focus_node, axs_row in zip(nodes.keys(), context_nodes, focus_nodes, axs):
+        context_node.plot_feature_dependence(feature, classes=classes, fig=fig, axs=axs_row, focus=focus_node, show=False)
+        axs_row[0].set_ylabel(f'{node_name}\ns({feature})')
+    for axs_row in axs[1:]:
+        for ax in axs_row:
+            ax.set_title('')
+    plt.subplots_adjust(wspace=.0, hspace=.0)
 
 
 def compare_indiv_dep_plots(node: ExplanationNode, feature=None, alpha=0.5, fig=None, axs=None):

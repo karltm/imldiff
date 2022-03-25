@@ -322,10 +322,14 @@ def make_clustering(comparer, shap_values, focus_class=None, cluster_classes=Non
 get_node_path = lambda node: get_node_path(node.parent) + [node] if node is not None else []
 
 
-def plot_joint_feature_dependence(feature, **nodes):
-    fig, axs = plt.subplots(nrows=len(nodes), ncols=3, figsize=(3*6, len(nodes)*4), sharex='all', sharey='all')
+def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2.5), **nodes):
+    if classes is None:
+        classes = next(iter(nodes.values())).cluster_classes
+    ncols = len(classes)
+    nrows = len(nodes)
+    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * figsize[0], nrows * figsize[1]), sharex='all', sharey='all')
     for (node_name, node), axs_row in zip(nodes.items(), axs):
-        node.plot_feature_dependence(feature, alpha=0.5, fig=fig, axs=axs_row)
+        node.plot_feature_dependence(feature, classes=classes, fig=fig, axs=axs_row, show=False)
         plt.subplots_adjust(wspace=.0, hspace=.0)
         axs_row[0].set_ylabel(f'SHAP Value of {node_name}')
 

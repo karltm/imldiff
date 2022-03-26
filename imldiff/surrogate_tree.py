@@ -38,28 +38,39 @@ def plot_surrogate_tree(model, feature_names, class_names=None, precision=3, fig
               class_names=np.array(class_names)[model.classes_], node_ids=node_ids)
 
 
+def plot_rules_of_tree_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
+                                 rule_order, feature_x=0, feature_y=1, figsize=(7, 7)):
+    leaf_labels = ['other'] + list(np.argsort(rule_order) + 1)
+    leaf_label_order = [0] + list(rule_order + 1)
+    plot_tree_leafs_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
+                              feature_x, feature_y,
+                              leafs_title='Rule #', leaf_labels=leaf_labels, leaf_label_order=leaf_label_order,
+                              show_contour_legend=True, figsize=figsize)
+
+
 def plot_tree_leafs_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
-                              feature_x=0, feature_y=1, figsize=(7, 7)):
+                              feature_x=0, feature_y=1, leafs_title='Node #', leaf_labels=None, leaf_label_order=None,
+                              show_contour_legend=False, figsize=(7, 7)):
     if isinstance(tree_focus_class_names, str):
         tree_focus_class_names = [tree_focus_class_names]
     if isinstance(feature_x, str):
         feature_x = list(feature_names).index(feature_x)
     if isinstance(feature_y, str):
         feature_y = list(feature_names).index(feature_y)
+
     focus_class_indices = [list(tree_class_names).index(label) for label in tree_focus_class_names]
     node_ids = [get_node_ids_for_class(tree, idx).tolist() for idx in focus_class_indices]
     node_ids = _flatten(node_ids)
     mapping = dict(zip(node_ids, range(1, len(node_ids)+1)))
 
+    leaf_labels = ['other'] + node_ids if leaf_labels is None else leaf_labels
+
     predict_node = lambda X: np.array([mapping.get(node_id, 0) for node_id in tree.apply(X)])
 
     fig, ax = plt.subplots(figsize=figsize)
-    plot_decision_boundary(X, y, idx_x=feature_x, idx_y=feature_y,
-                           feature_names=feature_names,
-                           class_names=class_names,
-                           predict=predict_node,
-                           predict_value_names=['other'] + node_ids,
-                           fig=fig, ax=ax)
+    plot_decision_boundary(X, y, idx_x=feature_x, idx_y=feature_y, feature_names=feature_names, class_names=class_names,
+                           predict=predict_node, show_contour_legend=show_contour_legend,
+                           predict_value_names=leaf_labels, predict_value_order=leaf_label_order, z_label=leafs_title, fig=fig, ax=ax)
 
 
 def _flatten(t):
@@ -92,7 +103,7 @@ def extract_rules(model, feature_names, classes_to_include, feature_order=None, 
     constraints = constraints[rule_order]
     node_ids = np.array(node_ids)[rule_order]
 
-    return constraints, rules, class_occurences, labels
+    return constraints, rules, class_occurences, labels, rule_order
 
 
 def tree_to_rules(tree: DecisionTreeClassifier, feature_names, feature_order=None, precisions=None, latex=False):
@@ -141,7 +152,7 @@ def eval_trees(trees: Iterable[DecisionTreeClassifier], feature_names, class_nam
     classes = next(iter(trees)).classes_
     metrics = []
     for tree in trees:
-        constraints, rules, _, labels = extract_rules(tree, feature_names, classes)
+        constraints, rules, _, labels, _ = extract_rules(tree, feature_names, classes)
         results = evaluate(tree, X_test, y_test, class_names)
         for label in np.unique(labels):
             metric = results.loc[class_names[label]].copy()

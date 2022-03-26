@@ -143,7 +143,7 @@ def calc_constraint_error(feature_names, constraints_true, constraints_test, ind
 
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
                            idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
-                           fig=None, ax=None, xlim=None, ylim=None, predict_value_names=None,
+                           fig=None, ax=None, xlim=None, ylim=None, predict_value_names=None, predict_value_order=None,
                            show_contour_legend=False, z_label=None, **kwargs):
     """
     - X: instances to plot
@@ -174,8 +174,8 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
     if z is None:
         z = predict(X)
 
-    if predict_value_names is None:
-        predict_value_names = class_names
+    predict_value_names = class_names if predict_value_names is None else predict_value_names
+    predict_value_order = range(len(predict_value_names)) if predict_value_order is None else predict_value_order
 
     draw_contours = predict is not None and X.shape[1] == 2
     if draw_contours:
@@ -195,7 +195,9 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
             proxy = [plt.Rectangle((0,0),1,1,fc = pc.get_facecolor()[0])
                      for pc in cs.collections]
             if show_contour_legend:
-                legend1 = ax.legend(proxy, predict_value_names, loc='upper left', label=z_label)
+                proxy = [proxy[idx] for idx in predict_value_order]
+                predict_value_names = [predict_value_names[idx] for idx in predict_value_order]
+                legend1 = ax.legend(proxy, predict_value_names, loc='upper left', title=z_label)
         for class_idx, class_ in enumerate(class_names):
             X_ = X_display[z == class_idx, :]
             if X_.shape[0] == 0:

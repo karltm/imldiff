@@ -325,7 +325,10 @@ get_node_path = lambda node: get_node_path(node.parent) + [node] if node is not 
 def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2), with_context=False, **nodes):
     classes = next(iter(nodes.values())).cluster_classes if classes is None else classes
     context_nodes = nodes.values()
-    focus_nodes = [node.get_last_child_before_focus_class_split() for node in nodes.values()] if with_context else nodes.values()
+    focus_nodes = [
+        node.get_last_child_before_focus_class_split() if hasattr(node, 'get_last_child_before_focus_class_split') else node
+        for node in nodes.values()
+    ] if with_context else nodes.values()
 
     ncols = len(classes)
     nrows = len(nodes)
@@ -385,9 +388,11 @@ def plot_2d(node: ExplanationNode, x, y):
         plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
 
 
-def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, shap_values_test, class_names):
+def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, shap_values_test):
     metrics = []
     for class_name, explanation in explanations_per_class.items():
+        if explanation.highlight.sum() == 0:
+            continue
         for distance, nodes in get_nodes_per_level(explanation).items():
             metric = eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_test)
             metric['Distance'] = distance
@@ -453,14 +458,15 @@ def _has_focus_class_instances(n: ExplanationNode):
     return n is not None and n.highlight.sum() > 0
 
 
-def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1):
+def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
     X = node.root.data
     comparer = node.comparer
     x, y = comparer.check_feature(x)[1], comparer.check_feature(y)[1]
     xlim = X[x].min() - 0.5, X[x].max() + 0.5
     ylim = X[y].min() - 0.5, X[y].max() + 0.5
-    comparer.plot_decision_boundaries(node.data, xlim=xlim, ylim=ylim)
+    comparer.plot_decision_boundaries(node.data, xlim=xlim, ylim=ylim, fig=fig, ax=ax)
+    handle = plt if ax is None else ax
     for cf in node.counterfactuals['x1']:
-        plt.axvline(cf.value, linewidth=1, color='black', linestyle='--')
+        handle.axvline(cf.value, linewidth=1, color='black', linestyle='--')
     for cf in node.counterfactuals['x2']:
-        plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
+        handle.axhline(cf.value, linewidth=1, color='black', linestyle='--')

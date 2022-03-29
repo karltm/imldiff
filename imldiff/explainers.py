@@ -389,7 +389,7 @@ def plot_feature_dependence(shap_values, feature, title=None, color=None, color_
             ax.axvline(x, alpha=0.6, linewidth=1, color='black', linestyle='--')
     ax.set_title(title)
     ax.set_xlabel(feature)
-    ax.set_ylabel('SHAP value of ' + feature)
+    ax.set_ylabel(f's({feature})')
     if draw_steps.dtype.type == np.str_:
         ax.legend()
     if sc is not None and fig is not None:

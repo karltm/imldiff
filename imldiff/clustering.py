@@ -10,6 +10,7 @@ from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactual
     counterfactuals_to_constraint_matrix, evaluate
 from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
+from matplotlib.ticker import MaxNLocator
 
 
 class Explanation:
@@ -329,6 +330,7 @@ def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2), with_co
         node.get_last_child_before_focus_class_split() if hasattr(node, 'get_last_child_before_focus_class_split') else node
         for node in nodes.values()
     ] if with_context else nodes.values()
+    comparer = focus_nodes[0].comparer
 
     ncols = len(classes)
     nrows = len(nodes)
@@ -339,6 +341,8 @@ def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2), with_co
     for axs_row in axs[1:]:
         for ax in axs_row:
             ax.set_title('')
+    if focus_nodes[0].feature_precisions[list(comparer.feature_names).index(feature)] == 0:
+        axs[-1][0].xaxis.set_major_locator(MaxNLocator(integer=True))
     plt.subplots_adjust(wspace=.0, hspace=.0)
 
 

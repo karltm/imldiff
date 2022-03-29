@@ -336,7 +336,7 @@ def evaluate(model, X, y, class_names=None):
 
 
 def evaluate_predictions(y, y_pred, classes, class_names):
-    precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y, y_pred, labels=classes)
+    precisions, recalls, f1_scores, supports = precision_recall_fscore_support(y, y_pred, labels=classes, warn_for=[])
     df = pd.DataFrame(np.array((precisions, recalls, f1_scores, supports)).T,
                       columns=['Precision', 'Recall', 'F1 Score', 'Support'],
                       index=class_names)

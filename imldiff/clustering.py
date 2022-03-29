@@ -392,23 +392,24 @@ def plot_2d(node: ExplanationNode, x, y):
         plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
 
 
-def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, y_test, shap_values_test):
+def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, shap_values_test):
     metrics = []
     for class_name, explanation in explanations_per_class.items():
         if explanation.highlight.sum() == 0:
             continue
         for distance, nodes in get_nodes_per_level(explanation).items():
-            metric = eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_test)
+            metric = eval_clusterings_for_class(class_name, nodes, X_test, shap_values_test)
             metric['Distance'] = distance
             metrics.append(metric)
     return pd.DataFrame(metrics).reset_index(drop=True)
 
 
-def eval_clusterings_for_class(class_name, nodes, X_test, y_test, shap_values_test):
+def eval_clusterings_for_class(class_name, nodes, X_test, shap_values_test):
     discr = _make_cluster_discriminator(nodes)
     pred_cluster_names = discr.predict(shap_values_test.values.reshape((shap_values_test.shape[0], -1)))
-    comparer = next(iter(nodes)).comparer
     nodes = dict([(str(node), node) for node in nodes])
+    comparer = next(iter(nodes.values())).comparer
+    y_test = comparer.predict_mclass_diff(X_test)
     y_pred = np.repeat(False, len(y_test))
     constraints = []
     for cluster_name in np.unique(pred_cluster_names):

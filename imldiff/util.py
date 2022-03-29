@@ -10,8 +10,6 @@ from sklearn.metrics import classification_report, precision_recall_fscore_suppo
 
 
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
-regex = re.compile('[^a-zA-Z0-9]')
-
 
 def get_index_and_name(names, index_or_name):
     if isinstance(index_or_name, str):
@@ -274,17 +272,16 @@ def _fmt(x, precision):
 
 def escape_feature_name(feature_name, latex=False):
     if latex:
-        feature_name = regex.sub('', feature_name)
         if feature_name == 'x1':
             feature_name = 'x_1'
-        if feature_name == 'x2':
+        elif feature_name == 'x2':
             feature_name = 'x_2'
-        return '\mathit{' + feature_name + '}'
+        else:
+            feature_name = '\\text{' + feature_name + '}'
     else:
         if ' ' in feature_name or '-' in feature_name:
-            return f'`{feature_name}`'
-        else:
-            return feature_name
+            feature_name = f'`{feature_name}`'
+    return feature_name
 
 
 def get_complexity(constraints):

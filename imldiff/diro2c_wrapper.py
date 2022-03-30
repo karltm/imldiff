@@ -58,8 +58,9 @@ class WrappedDiro2C:
                                      generation_func, gn_population_size=gn_population_size)
 
 
-def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, highlight=None):
+def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, highlight=None, ax=None, class_names=None):
     model = get_surrogate_tree(explanation)
+    class_names = [str(label) for label in model.classes_] if class_names is None else class_names
     X, y = get_generated_data(explanation)
     feature_names = get_feature_names(explanation)
     if isinstance(feature_x, str) and isinstance(feature_y, str):
@@ -68,16 +69,17 @@ def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, high
         idx_x, idx_y = feature_x, feature_y
         feature_x = feature_names[idx_x]
         feature_y = feature_names[idx_y]
-    fig, ax = plt.subplots(figsize=(7, 7))
+    if ax is None:
+        _, ax = plt.subplots(figsize=(7, 7))
     ax.set_xlabel(feature_x)
     ax.set_ylabel(feature_y)
     if xlim is not None:
         ax.set_xlim(xlim)
     if ylim is not None:
         ax.set_ylim(ylim)
-    for label in model.classes_:
+    for label, class_name in zip(model.classes_, class_names):
         mask = y == label
-        ax.scatter(X[mask, idx_x], X[mask, idx_y], label=str(label), alpha=0.5)
+        ax.scatter(X[mask, idx_x], X[mask, idx_y], label=class_name, alpha=0.5)
     if highlight is not None:
         ax.scatter(highlight[idx_x], highlight[idx_y], color='k', marker='x')
     ax.legend()

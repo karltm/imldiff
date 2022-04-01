@@ -363,7 +363,7 @@ def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5, fig=None
     class_names = [class_name for class_name in node.comparer.base_class_names
                    if any([n.endswith('.' + class_name) for n in node.shap_values.output_names])]
     class_names_a, class_names_b = tuple([
-        [clf + '.' + class_name for class_name in class_names] for clf in ['A', 'B']
+        [clf + '.' + class_name for class_name in class_names] for clf in node.comparer.classifier_names
     ])
     if fig is None or axs is None:
         fig, axs = plt.subplots(ncols=len(class_names_a), nrows=2, sharex='all', sharey='row', squeeze=False,
@@ -378,7 +378,7 @@ def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5, fig=None
                                          fig=fig, axs=axs[0], show=False)
     for ax, label in zip(axs[0], class_names):
         ax.set_title('Class ' + label)
-    axs[0][-1].legend([scs_a[-1], scs_b[-1]], ['A', 'B'])
+    axs[0][-1].legend([scs_a[-1], scs_b[-1]], node.comparer.classifier_names)
     axs[1][0].set_ylabel('Difference')
     for class_name_a, class_name_b, ax in zip(class_names_a, class_names_b, axs[1]):
         diff = node.shap_values[:, feature, class_name_b].values - node.shap_values[:, feature, class_name_a].values

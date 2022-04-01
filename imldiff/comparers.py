@@ -10,13 +10,15 @@ from util import get_index_and_name, plot_decision_boundary
 class ModelComparer:
     """ Helper class for comparing two models """
     
-    def __init__(self, clf_a, clf_b, feature_names):
+    def __init__(self, clf_a, clf_b, feature_names, name_a='A', name_b='B'):
         self.feature_names = np.array(feature_names)
         self.clf_a = clf_a
         self.clf_b = clf_b
+        self.name_a = name_a
+        self.name_b = name_b
         self.bin_diff_clf = BinaryDifferenceClassifier(clf_a, clf_b)
         self.mclass_diff_clf = MulticlassDifferenceClassifier(clf_a, clf_b)
-        self.classifier_names = np.array(['A', 'B'])
+        self.classifier_names = np.array([self.name_a, self.name_b])
         self.bin_class_names = np.array(['equal', 'different'])
         
     def fit(self, X, y):
@@ -254,15 +256,16 @@ class ModelComparer:
             else:
                 raise Exception('invalid type: ' + str(type))
                 
-    def plot_confusion_matrix(self, X):
+    def plot_confusion_matrix(self, X, ax=None):
         pred_a = self.clf_a.predict(X)
         pred_b = self.clf_b.predict(X)
         cm = confusion_matrix(pred_a, pred_b, labels=self.base_classes)
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.base_classes)
-        fig, ax = plt.subplots(constrained_layout=True)
-        disp.plot(ax=ax)
-        ax.set_ylabel('predictions of A')
-        ax.set_xlabel('predictions of B')
+        if ax is None:
+            _, ax = plt.subplots(constrained_layout=True)
+        disp.plot(ax=ax, colorbar=False)
+        ax.set_ylabel('predictions of ' + self.name_a)
+        ax.set_xlabel('predictions of ' + self.name_b)
 
 
 def _encode_one_hot(labels, classes):

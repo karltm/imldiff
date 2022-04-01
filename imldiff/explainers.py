@@ -351,7 +351,7 @@ def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=No
     else:
         if len(axs.shape) == 1:
             axs = axs.reshape((1, axs.shape[0]))
-    sc = None
+    scs = []
     for row_idx, (axs_row, feature) in enumerate(zip(axs, shap_values.feature_names)):
         for col_idx, (class_name, ax) in enumerate(zip(shap_values.output_names, axs_row)):
             sc = plot_feature_dependence(shap_values[:, :, class_name], feature, color=color, fill=fill, alpha=alpha,
@@ -359,14 +359,15 @@ def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=No
                                           title=class_name if row_idx == 0 else None,
                                           jitter=jitter,
                                           vlines=vlines)
+            scs.append(sc)
             if col_idx > 0:
                 ax.set_ylabel(None)
                 plt.setp(ax.get_yticklabels(), visible=False)
                 #plt.setp(ax.get_yticklines(), visible=False)
     plt.subplots_adjust(wspace=.0)
-    if color_label is not None and sc is not None:
-        fig.colorbar(sc, ax=axs.ravel().tolist(), label=color_label)
-    return sc
+    if color_label is not None:
+        fig.colorbar(scs[0], ax=axs.ravel().tolist(), label=color_label)
+    return scs
 
 
 def plot_feature_dependence(shap_values, feature, title=None, color=None, color_label=None, fill=None, alpha=None,

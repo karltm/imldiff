@@ -325,11 +325,11 @@ get_node_path = lambda node: get_node_path(node.parent) + [node] if node is not 
 
 def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2), with_context=False, **nodes):
     classes = next(iter(nodes.values())).cluster_classes if classes is None else classes
-    context_nodes = nodes.values()
+    context_nodes = [node[0] if isinstance(node, tuple) else node for node in nodes.values()]
     focus_nodes = [
         node.get_last_child_before_focus_class_split() if hasattr(node, 'get_last_child_before_focus_class_split') else node
         for node in nodes.values()
-    ] if with_context else nodes.values()
+    ] if with_context else [node[1] if isinstance(node, tuple) else node for node in nodes.values()]
     comparer = focus_nodes[0].comparer
 
     ncols = len(classes)

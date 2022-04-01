@@ -112,7 +112,7 @@ class Explanation:
             counterfactuals = focus.counterfactuals
         else:
             counterfactuals = self.counterfactuals
-        feature = self.comparer.check_feature(feature)[1]
+        feature_idx, feature = self.comparer.check_feature(feature)
         if classes is None:
             classes = self.cluster_classes
         color_feature_name = None
@@ -122,10 +122,14 @@ class Explanation:
             color_feature_idx, color_feature_name = self.comparer.check_feature(color)
             color = self.data.iloc[:, color_feature_idx]
         s = self.shap_values[:, :, classes]
-        return plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
+        scs = plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
                                          alpha=alpha, jitter=feature in self.categorical_features,
                                          vlines=[cf.value for cf in counterfactuals.get(feature) if cf], figsize=figsize,
                                          fig=fig, axs=axs)
+        if self.feature_precisions[feature_idx] == 0:
+            for sc in scs:
+                sc.axes.xaxis.set_major_locator(MaxNLocator(integer=True))
+        return scs
 
     def plot_outcomes(self, classes=None, ax=None):
         classes = classes if classes is not None else self.cluster_classes

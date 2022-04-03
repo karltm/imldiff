@@ -32,8 +32,8 @@ class Counterfactual:
         return class_ in self.outcomes.keys()
 
     def __repr__(self):
-        sign = 'Upper' if self.is_direction_up else 'Lower'
-        return f'{sign} CF: {self.feature} == {self.value} --> {self.outcomes}'
+        outcomes = '.'.join([f'{count}x {label}' for label, count in self.outcomes.items()])
+        return f'{self.value}: {outcomes}'
 
 
 def find_counterfactuals(comparer, X, X_context, feature_precisions, label):

@@ -1,16 +1,16 @@
-from pprint import pprint
 import pandas as pd
 import numpy as np
 from scipy.spatial import distance
 from scipy.cluster import hierarchy
 import matplotlib.pyplot as plt
 import seaborn as sns
-from explainers import plot_feature_dependencies, calc_feature_order
-from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, \
-    counterfactuals_to_constraint_matrix, evaluate
+from explainers import calc_feature_order
+from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, counterfactuals_to_constraint_matrix
 from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
-from matplotlib.ticker import MaxNLocator
+
+
+FIGSIZE = 4, 3
 
 
 class Explanation:
@@ -90,46 +90,22 @@ class Explanation:
                            self.categorical_features, self.feature_precisions, self.orig_highlight,
                            self.focus_class, self)
 
-    def plot_feature_dependence(self, *features, classes=None, alpha=0.5, color=None, fill=None, focus=None,
-                                figsize=None, fig=None, axs=None, print_stats=False, show=True):
-        node = focus if focus is not None else self
-        if len(features) == 0:
-            features = node.features_ordered
-        scs = []
-        for feature in features:
-            if print_stats:
-                node.describe_feature_differences(feature)
-                pprint(node.counterfactuals[feature])
-            scs.append(self._plot_feature_dependence(feature, classes, alpha, color, fill, focus, figsize, fig, axs))
-            if show:
-                plt.show()
-        return scs
-
-    def _plot_feature_dependence(self, feature, classes=None, alpha=0.5, color=None, fill=None, focus=None,
-                                figsize=None, fig=None, axs=None):
-        if focus is not None:
-            fill = np.in1d(self.instance_indices, focus.instance_indices)
-            counterfactuals = focus.counterfactuals
+    def plot_feature_dependence(self, *features, classes=None, focus=None, color=None, color_label=None, figsize=FIGSIZE,
+                                alpha=None, axs=None, simplify=False, **kwargs):
+        node = self if focus is None else focus
+        features = node.features_ordered if len(features) == 0 else features
+        if focus is None:
+            plot_dependence_curves(self, features, classes, simplify=simplify, color=color,
+                                   color_label=color_label, alpha=alpha, axs=axs, figsize=figsize)
         else:
-            counterfactuals = self.counterfactuals
-        feature_idx, feature = self.comparer.check_feature(feature)
-        if classes is None:
-            classes = self.cluster_classes
-        color_feature_name = None
-        if color is None:
-            color = self.highlight
-        elif isinstance(color, str) or isinstance(color, int):
-            color_feature_idx, color_feature_name = self.comparer.check_feature(color)
-            color = self.data.iloc[:, color_feature_idx]
-        s = self.shap_values[:, :, classes]
-        scs = plot_feature_dependencies(s[:, [feature]], color=color, color_label=color_feature_name, fill=fill,
-                                         alpha=alpha, jitter=feature in self.categorical_features,
-                                         vlines=[cf.value for cf in counterfactuals.get(feature) if cf], figsize=figsize,
-                                         fig=fig, axs=axs)
-        if self.feature_precisions[feature_idx] == 0:
-            for sc in scs:
-                sc.axes.xaxis.set_major_locator(MaxNLocator(integer=True))
-        return scs
+            for feature in features:
+                nodes = {
+                    'Context': self,
+                    'Focus': focus
+                }
+                plot_dependence_curves_for_nodes(feature, classes, simplify=simplify, color=color,
+                                                 color_label=color_label, alpha=alpha, axs=axs, figsize=figsize, **nodes)
+                plt.show()
 
     def plot_outcomes(self, classes=None, ax=None):
         classes = classes if classes is not None else self.cluster_classes
@@ -324,78 +300,6 @@ def make_clustering(comparer, shap_values, focus_class=None, cluster_classes=Non
     return node
 
 
-get_node_path = lambda node: get_node_path(node.parent) + [node] if node is not None else []
-
-
-def plot_joint_feature_dependence(feature, classes=None, figsize=(4, 2), with_context=False, **nodes):
-    classes = next(iter(nodes.values())).cluster_classes if classes is None else classes
-    context_nodes = [node[0] if isinstance(node, tuple) else node for node in nodes.values()]
-    focus_nodes = [
-        node.get_last_child_before_focus_class_split() if hasattr(node, 'get_last_child_before_focus_class_split') else node
-        for node in nodes.values()
-    ] if with_context else [node[1] if isinstance(node, tuple) else node for node in nodes.values()]
-    comparer = focus_nodes[0].comparer
-
-    ncols = len(classes)
-    nrows = len(nodes)
-    fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=(ncols * figsize[0], nrows * figsize[1]), sharex='all', sharey='all', squeeze=False)
-    for node_name, context_node, focus_node, axs_row in zip(nodes.keys(), context_nodes, focus_nodes, axs):
-        context_node.plot_feature_dependence(feature, classes=classes, fig=fig, axs=axs_row, focus=focus_node, show=False)
-        axs_row[0].set_ylabel(f'{node_name}\ns({feature})')
-    for axs_row in axs[1:]:
-        for ax in axs_row:
-            ax.set_title('')
-    if focus_nodes[0].feature_precisions[list(comparer.feature_names).index(feature)] == 0:
-        axs[-1][0].xaxis.set_major_locator(MaxNLocator(integer=True))
-    plt.subplots_adjust(wspace=.0, hspace=.0)
-
-
-def compare_indiv_dep_plots(node: ExplanationNode, feature=None, alpha=0.5, fig=None, axs=None):
-    if feature is None:
-        for feature in node.features_ordered:
-            _compare_indiv_dep_plots(node, feature, alpha)
-            plt.show()
-    else:
-        _compare_indiv_dep_plots(node, feature, alpha, fig, axs)
-
-
-def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5, fig=None, axs=None):
-    class_names = [class_name for class_name in node.comparer.base_class_names
-                   if any([n.endswith('.' + class_name) for n in node.shap_values.output_names])]
-    class_names_a, class_names_b = tuple([
-        [clf + '.' + class_name for class_name in class_names] for clf in node.comparer.classifier_names
-    ])
-    if fig is None or axs is None:
-        fig, axs = plt.subplots(ncols=len(class_names_a), nrows=2, sharex='all', sharey='row', squeeze=False,
-                                figsize=(len(class_names_a) * 7, 1.5 * 5), gridspec_kw={'height_ratios': [2,1]})
-    for ax in axs[0]:
-        ax.axhline(0, linewidth=1, color='grey', alpha=0.5)
-    scs_a = node.plot_feature_dependence(feature, classes=class_names_a, alpha=alpha*2/3,
-                                         color=np.repeat(False, len(node.data)),
-                                         fig=fig, axs=axs[0], show=False)
-    scs_b = node.plot_feature_dependence(feature, classes=class_names_b, alpha=alpha*2/3,
-                                         color=np.repeat(True, len(node.data)),
-                                         fig=fig, axs=axs[0], show=False)
-    for ax, label in zip(axs[0], class_names):
-        ax.set_title('Class ' + label)
-    axs[0][-1].legend([scs_a[-1], scs_b[-1]], node.comparer.classifier_names)
-    axs[1][0].set_ylabel('Difference')
-    for class_name_a, class_name_b, ax in zip(class_names_a, class_names_b, axs[1]):
-        diff = node.shap_values[:, feature, class_name_b].values - node.shap_values[:, feature, class_name_a].values
-        ax.scatter(node.data[feature], diff, alpha=alpha)
-        ax.axhline(0, linewidth=1, alpha=0.5)
-        ax.set_xlabel(feature)
-    plt.subplots_adjust(wspace=.0, hspace=.0)
-
-
-def plot_2d(node: ExplanationNode, x, y):
-    node.comparer.plot_decision_boundaries(node.root.data, type='bin-diffclf', x=x, y=y, alpha=0.5)
-    for cf in node.counterfactuals[x]:
-        plt.axvline(cf.value, linewidth=1, color='black', linestyle='--')
-    for cf in node.counterfactuals[y]:
-        plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
-
-
 def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, shap_values_test):
     metrics = []
     for class_name, explanation in explanations_per_class.items():
@@ -467,6 +371,52 @@ def _has_focus_class_instances(n: ExplanationNode):
     return n is not None and n.highlight.sum() > 0
 
 
+def compare_indiv_dep_plots(node: ExplanationNode, feature=None, alpha=0.5, fig=None, axs=None):
+    if feature is None:
+        for feature in node.features_ordered:
+            _compare_indiv_dep_plots(node, feature, alpha)
+            plt.show()
+    else:
+        _compare_indiv_dep_plots(node, feature, alpha, fig, axs)
+
+
+def _compare_indiv_dep_plots(node: ExplanationNode, feature, alpha=0.5, fig=None, axs=None):
+    class_names = [class_name for class_name in node.comparer.base_class_names
+                   if any([n.endswith('.' + class_name) for n in node.shap_values.output_names])]
+    class_names_a, class_names_b = tuple([
+        [clf + '.' + class_name for class_name in class_names] for clf in node.comparer.classifier_names
+    ])
+    if fig is None or axs is None:
+        fig, axs = plt.subplots(ncols=len(class_names_a), nrows=2, sharex='all', sharey='row', squeeze=False,
+                                figsize=(len(class_names_a) * 7, 1.5 * 5), gridspec_kw={'height_ratios': [2,1]})
+    for ax in axs[0]:
+        ax.axhline(0, linewidth=1, color='grey', alpha=0.5)
+    scs_a = node.plot_feature_dependence(feature, classes=class_names_a, alpha=alpha*2/3,
+                                         color=np.repeat(False, len(node.data)),
+                                         fig=fig, axs=axs[0], show=False)
+    scs_b = node.plot_feature_dependence(feature, classes=class_names_b, alpha=alpha*2/3,
+                                         color=np.repeat(True, len(node.data)),
+                                         fig=fig, axs=axs[0], show=False)
+    for ax, label in zip(axs[0], class_names):
+        ax.set_title('Class ' + label)
+    axs[0][-1].legend([scs_a[-1], scs_b[-1]], node.comparer.classifier_names)
+    axs[1][0].set_ylabel('Difference')
+    for class_name_a, class_name_b, ax in zip(class_names_a, class_names_b, axs[1]):
+        diff = node.shap_values[:, feature, class_name_b].values - node.shap_values[:, feature, class_name_a].values
+        ax.scatter(node.data[feature], diff, alpha=alpha)
+        ax.axhline(0, linewidth=1, alpha=0.5)
+        ax.set_xlabel(feature)
+    plt.subplots_adjust(wspace=.0, hspace=.0)
+
+
+def plot_2d(node: ExplanationNode, x, y):
+    node.comparer.plot_decision_boundaries(node.root.data, type='bin-diffclf', x=x, y=y, alpha=0.5)
+    for cf in node.counterfactuals[x]:
+        plt.axvline(cf.value, linewidth=1, color='black', linestyle='--')
+    for cf in node.counterfactuals[y]:
+        plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
+
+
 def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
     X = node.root.data
     comparer = node.comparer
@@ -479,3 +429,71 @@ def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
         handle.axvline(cf.value, linewidth=1, color='black', linestyle='--')
     for cf in node.counterfactuals['x2']:
         handle.axhline(cf.value, linewidth=1, color='black', linestyle='--')
+
+
+def plot_dependence_curves_for_nodes(feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=FIGSIZE, **nodes):
+    labels = next(iter(nodes.values())).cluster_classes if labels is None else labels
+    nrows, ncols = len(nodes), len(labels)
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='all', sharex='all', squeeze=False, tight_layout=True)[1] if axs is None else axs
+    for idx, (name, node, axs_row) in enumerate(zip(nodes.keys(), nodes.values(), axs)):
+        is_first = idx == 0
+        plot_dependence_curves_for_feature(node, feature, labels=labels, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, axs=axs_row)
+        axs_row[0].set_ylabel(name + '\n' + axs_row[0].get_ylabel())
+
+
+def plot_dependence_curves(node, features=None, labels=None, simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=FIGSIZE):
+    features = node.features_ordered if features is None else features
+    labels = node.cluster_classes if labels is None else labels
+    nrows, ncols = len(features), len(labels)
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='row', squeeze=False, tight_layout=True)[1] if axs is None else axs
+    for idx, (feature, axs_row) in enumerate(zip(features, axs)):
+        is_first = idx == 0
+        plot_dependence_curves_for_feature(node, feature, labels=labels, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, axs=axs_row)
+
+
+def plot_dependence_curves_for_feature(node, feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, axs=None, show_title=True, figsize=FIGSIZE):
+    labels = node.cluster_classes if labels is None else labels
+    ncols = len(labels)
+    axs = plt.subplots(ncols=ncols, figsize=(ncols*figsize[0], figsize[1]), sharey='row', squeeze=False, tight_layout=True)[1][0] if axs is None else axs
+    for idx, (label, ax) in enumerate(zip(labels, axs)):
+        is_first, is_last = idx == 0, idx == len(labels) - 1
+        ax = plot_dependence_curve(node, feature, label, simplify=simplify, color=color, color_label=color_label, alpha=alpha, ax=ax, show_legend=is_last)
+        if show_title:
+            ax.set_title(f'Class {label}\'s outcome')
+        if not is_first:
+            ax.set_ylabel('')
+
+
+def plot_dependence_curve(node, feature, label, simplify=False, color=None, color_label=None, alpha=None, ax=None, show_legend=True):
+    class_names = node.comparer.class_names
+    df = pd.DataFrame({
+        feature: node.data[feature],
+        f's({feature})': node.shap_values[:, feature, label].values,
+        'Label': node.pred_classes,
+    })
+    if color_label is not None:
+        df[color_label] = color
+    else:
+        color_label = 'Label'
+    if node.feature_precisions[list(node.comparer.feature_names).index(feature)] == 0:
+        df[feature] = df[feature].astype(int)
+    df = pd.concat([df[df['Label'] != node.focus_class], df[df['Label'] == node.focus_class]])
+    if simplify:
+        class_names = ['other', node.focus_class]
+        df.loc[df['Label'] != node.focus_class, 'Label'] = 'other'
+    plot = sns.stripplot if feature in node.categorical_features else sns.scatterplot
+    ax = plot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=class_names, alpha=alpha, ax=ax)
+    if show_legend:
+        legend_sc = ax.legend(title=color_label, loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
+        ax.add_artist(legend_sc)
+    else:
+        ax.get_legend().remove()
+    lines = [_plot_counterfactual(cf, ax=ax) for cf in node.counterfactuals[feature]]
+    if show_legend and len(lines) > 0:
+        ax.legend(lines, [line.get_label() for line in lines], title='Counterfactuals')
+    return ax
+
+
+def _plot_counterfactual(cf, ax):
+    linestyle = 'dotted' if cf.is_direction_up else 'dashed'
+    return ax.axvline(cf.value, alpha=0.3, linewidth=2, color='black', linestyle=linestyle, label=str(cf))

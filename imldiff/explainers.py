@@ -1,4 +1,3 @@
-from typing import Iterable
 import shap
 from shap.maskers import Independent
 from shap.utils import hclust_ordering
@@ -10,8 +9,6 @@ import warnings
 from comparers import ModelComparer
 from IPython.display import display
 from shap.utils import approximate_interactions
-from shap.plots.colors import red_blue
-
 
 color_palette = plt.rcParams["axes.prop_cycle"].by_key()['color']
 
@@ -291,132 +288,6 @@ def _plot_feature_importance_scatter_multiclass(shap_values, title=None, feature
         plt.title(shap_values.feature_names[feature_idx])
 
 
-def _make_plot_colors(n_values, fill=None, color=None):
-    if color is None:
-        color = np.repeat(False, n_values)
-    if fill is None:
-        fill = np.repeat(True, n_values)
-    if color.dtype == bool:
-        return _make_binary_plot_colors(n_values, fill, color)
-    elif color.dtype == float:
-        return _make_continuous_plot_colors(n_values, fill, color)
-    elif color.dtype.type == np.str_:
-        return _make_str_plot_colors(n_values, fill, color)
-    else:
-        raise Exception('color only supports a bool or number array')
-
-
-def _make_binary_plot_colors(n_values, fill=None, color=None):
-    draw_steps = np.repeat(0, n_values)
-    draw_steps[~fill & color] = 1
-    draw_steps[fill & ~color] = 2
-    draw_steps[fill & color] = 3
-
-    plot_colors = np.repeat('xkcd:light blue', n_values)
-    plot_colors[draw_steps == 1] = 'xkcd:pale pink'
-    plot_colors[draw_steps == 2] = 'xkcd:blue'
-    plot_colors[draw_steps == 3] = 'xkcd:red'
-
-    return draw_steps, plot_colors, None
-
-
-def _make_continuous_plot_colors(n_values, fill=None, color=None):
-    draw_steps = np.repeat(0, n_values)
-    if fill is not None and np.sum(fill) > 0:
-        draw_steps[fill] = 1
-    plot_colors = color
-    cmaps = ['RdYlBu_r', red_blue]
-    return draw_steps, plot_colors, cmaps
-
-
-def _make_str_plot_colors(n_values, fill, color):
-    color_set = np.unique(color)
-    if len(color_set) > 10:
-        raise Exception('supports only 10 different colors at max. currently')
-    draw_steps = np.array(color)
-    plot_colors = np.array([color_palette[color_set.tolist().index(c)] for c in color])
-    return draw_steps, plot_colors, None
-
-
-def plot_feature_dependencies(shap_values, color=None, color_label=None, fill=None, alpha=None, jitter=None,
-                              vlines=None, figsize=None, fig=None, axs=None):
-    shap_values = ensure_shap_values_are_3d(shap_values)
-    if figsize is None:
-        figsize = (7, 5)
-    ncols = len(shap_values.output_names)
-    nrows = len(shap_values.feature_names)
-    if fig is None or axs is None:
-        fig, axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(figsize[0]*ncols, figsize[1]*nrows),
-                                sharey='row', squeeze=False)
-    else:
-        if len(axs.shape) == 1:
-            axs = axs.reshape((1, axs.shape[0]))
-    scs = []
-    for row_idx, (axs_row, feature) in enumerate(zip(axs, shap_values.feature_names)):
-        for col_idx, (class_name, ax) in enumerate(zip(shap_values.output_names, axs_row)):
-            sc = plot_feature_dependence(shap_values[:, :, class_name], feature, color=color, fill=fill, alpha=alpha,
-                                          ax=ax,
-                                          title=class_name if row_idx == 0 else None,
-                                          jitter=jitter,
-                                          vlines=vlines)
-            scs.append(sc)
-            if col_idx > 0:
-                ax.set_ylabel(None)
-                plt.setp(ax.get_yticklabels(), visible=False)
-                #plt.setp(ax.get_yticklines(), visible=False)
-    plt.subplots_adjust(wspace=.0)
-    if color_label is not None:
-        fig.colorbar(scs[0], ax=axs.ravel().tolist(), label=color_label)
-    return scs
-
-
-def plot_feature_dependence(shap_values, feature, title=None, color=None, color_label=None, fill=None, alpha=None,
-                            fig=None, ax=None, jitter=False, vlines=None):
-    if isinstance(feature, (int, np.integer)):
-        feature = shap_values.feature_names[feature]
-    s = shap_values[:, feature]
-    if ax is None:
-        fig, ax = plt.subplots(figsize=(7, 5), constrained_layout=True)
-    draw_steps, plot_colors, cmaps = _make_plot_colors(len(shap_values), fill, color)
-    sc = None
-    for draw_step in np.unique(draw_steps):
-        cmap = None if cmaps is None else cmaps[draw_step]
-        mask = draw_steps == draw_step
-        s_plot = s[mask]
-        current_plot_colors = plot_colors[mask]
-        sc = _scatter(s_plot.data, s_plot.values, ax=ax, jitter=jitter, c=current_plot_colors, cmap=cmap, alpha=alpha, label=draw_step)
-    if vlines is not None:
-        for x in vlines:
-            ax.axvline(x, alpha=0.6, linewidth=1, color='black', linestyle='--')
-    ax.set_title(title)
-    ax.set_xlabel(feature)
-    ax.set_ylabel(f's({feature})')
-    if draw_steps.dtype.type == np.str_:
-        ax.legend()
-    if sc is not None and fig is not None:
-        fig.colorbar(sc, ax=ax, label=color_label)
-    return sc
-
-
-def _scatter(x, y, ax=None, jitter=False, s=20, c='b', marker='o', cmap=None, norm=None, vmin=None, vmax=None, alpha=None, linewidths=None, verts=None, hold=None, **kwargs):
-    """source: https://stackoverflow.com/questions/8671808/matplotlib-avoiding-overlapping-datapoints-in-a-scatter-dot-beeswarm-plot"""
-    if ax is not None:
-        func = ax.scatter
-    else:
-        func = plt.scatter
-    if jitter:
-        if x.dtype == int or x.dtype == float:
-            x = _rand_jitter(x)
-        if y.dtype == int or y.dtype == float:
-            y = _rand_jitter(y)
-    return func(x, y, s=s, c=c, marker=marker, cmap=cmap, norm=norm, vmin=vmin, vmax=vmax, alpha=alpha, linewidths=linewidths, **kwargs)
-
-
-def _rand_jitter(arr):
-    stdev = .01 * (max(arr) - min(arr))
-    return arr + np.random.randn(len(arr)) * stdev
-
-
 def plot_forces(shap_values, title=None, instance_order=None, class_order=None, **kwargs):
     """ Create force plots of all instances
 
@@ -484,3 +355,15 @@ def _plot_decision_singleclass(shap_values, **kwargs):
 def print_rules(rules):
     for idx, rule in enumerate(rules, 1):
         print(f'{idx}. {rule}')
+
+
+def make_diff_shap_values(indiv_shap_values):
+    labels = indiv_shap_values.output_names
+    prefix_a = labels[0].split('.')[0]
+    labels_a = [label for label in labels if label.startswith(prefix_a)]
+    labels_b = [label for label in labels if not label.startswith(prefix_a)]
+    base_labels = [label.split('.')[1] for label in labels_a]
+    diff_shap_values = indiv_shap_values[:, :, labels_b] - indiv_shap_values[:, :, labels_a]
+    diff_shap_values.output_names = base_labels
+    diff_shap_values.data = indiv_shap_values.data
+    return diff_shap_values

@@ -33,7 +33,7 @@ class Explanation:
         self.pred_classes = pred_classes[instance_indices]
         self.class_counts = pd.Series(self.pred_classes).value_counts()
         self._calculate_feature_order()
-        self.counterfactuals = counterfactuals[str(self)] if counterfactuals is not None else (
+        self.counterfactuals = counterfactuals[repr(self)] if counterfactuals is not None else (
             parent.counterfactuals if parent is not None and
                                       self.class_counts.get(self.focus_class) ==
                                       parent.class_counts.get(self.focus_class) else
@@ -86,25 +86,25 @@ class Explanation:
             instance_indices = self.data.query(by).index.to_numpy()
         else:
             instance_indices = self.instance_indices[by]
-        return Explanation(self.comparer, self.orig_shap_values, instance_indices, self.cluster_classes, self.orig_pred_classes,
-                           self.categorical_features, self.feature_precisions, self.orig_highlight,
-                           self.focus_class, self)
+        return Explanation(self.comparer, self.orig_shap_values, instance_indices, self.cluster_classes,
+                           self.orig_pred_classes, self.categorical_features, self.feature_precisions,
+                           self.orig_highlight, self.focus_class, self)
 
     def plot_feature_dependence(self, *features, classes=None, focus=None, color=None, color_label=None, figsize=FIGSIZE,
                                 alpha=None, axs=None, simplify=False, **kwargs):
         node = self if focus is None else focus
-        features = node.features_ordered if len(features) == 0 else features
-        if focus is None:
+        if node.focus_class is None:
+            plot_indiv_dependence_curve_comparisons(self, features, classes, color=color, color_label=color_label, alpha=alpha,
+                                                    figsize=figsize, axs=axs)
+        elif focus is None:
             plot_dependence_curves(self, features, classes, simplify=simplify, color=color,
                                    color_label=color_label, alpha=alpha, axs=axs, figsize=figsize)
         else:
+            features = node.features_ordered if len(features) == 0 else features
             for feature in features:
-                nodes = {
-                    'Context': self,
-                    'Focus': focus
-                }
-                plot_dependence_curves_for_nodes(feature, classes, simplify=simplify, color=color,
-                                                 color_label=color_label, alpha=alpha, axs=axs, figsize=figsize, **nodes)
+                plot_dependence_curves_for_nodes(self, focus, feature=feature, labels=classes, simplify=simplify,
+                                                 color=color, color_label=color_label, alpha=alpha, axs=axs,
+                                                 figsize=figsize)
                 plt.show()
 
     def plot_outcomes(self, classes=None, ax=None):
@@ -176,6 +176,38 @@ class Explanation:
                                                     include_features, self.counterfactuals)
 
 
+def _make_node_name(parent, instance_indices, cluster_node):
+    if parent is None:
+        return 'Root'
+    if parent.root.highlight.sum() == parent.root.orig_highlight[instance_indices].sum():
+        return 'Main'
+    is_left_child = parent.cluster_node.get_left().id == cluster_node.id
+    if parent.node_name == 'Main' or parent.node_name == 'Root':
+        return 'Node 1' if is_left_child else 'Node 2'
+    if parent.highlight.sum() == parent.root.orig_highlight[instance_indices].sum():
+        return parent.node_name
+    return parent.node_name + ('.1' if is_left_child else '.2')
+
+
+def _make_cluster_name(parent, cluster_node):
+    if parent is None:
+        return 'root'
+    is_left_child = parent.cluster_node.get_left().id == cluster_node.id
+    if is_left_child:
+        name = 'L'
+    else:
+        name = 'R'
+    parent_name = parent.cluster_name
+    if parent_name == 'root':
+        return name
+    else:
+        return parent_name + name
+
+
+class NodeDoesntExistException(Exception):
+    pass
+
+
 class ExplanationNode(Explanation):
     def __init__(self, comparer, shap_values, cluster_node, instance_indices, cluster_classes, pred_classes,
                  distance_matrix, linkage_matrix, categorical_features, feature_precisions, highlight,
@@ -183,6 +215,8 @@ class ExplanationNode(Explanation):
         self.cluster_node = cluster_node
         self.distance_matrix = distance_matrix
         self.linkage_matrix = linkage_matrix
+        self.cluster_name = _make_cluster_name(parent, cluster_node)
+        self.node_name = _make_node_name(parent, instance_indices, cluster_node)
         super(ExplanationNode, self).__init__(comparer, shap_values, instance_indices, cluster_classes,
                                               pred_classes, categorical_features, feature_precisions,
                                               highlight, focus_class, parent, counterfactuals)
@@ -225,17 +259,10 @@ class ExplanationNode(Explanation):
         return child_cfs
 
     def __repr__(self):
-        if self.parent is None:
-            return 'root'
-        if self.parent.cluster_node.get_left().id == self.cluster_node.id:
-            name = 'L'
-        else:
-            name = 'R'
-        parent_name = str(self.parent)
-        if parent_name == 'root':
-            return name
-        else:
-            return parent_name + name
+        return self.cluster_name
+
+    def __str__(self):
+        return self.node_name
 
     def get(self, name):
         if name.startswith('L'):
@@ -251,9 +278,15 @@ class ExplanationNode(Explanation):
     def get_right(self):
         return self.right
 
+    def get_left_node(self):
+        return self.get_last_child_before_focus_class_split().left
+
+    def get_right_node(self):
+        return self.get_last_child_before_focus_class_split().right
+
     def get_last_child_before_focus_class_split(self):
         if not self.focus_class in list(self.class_counts.keys()):
-            raise Exception('Difference class not present in cluster')
+            raise NodeDoesntExistException('Difference class not present in cluster')
         if len(self.shap_values) == 1:
             return self
         left = self.get_left()
@@ -431,14 +464,14 @@ def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
         handle.axhline(cf.value, linewidth=1, color='black', linestyle='--')
 
 
-def plot_dependence_curves_for_nodes(feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=FIGSIZE, **nodes):
-    labels = next(iter(nodes.values())).cluster_classes if labels is None else labels
+def plot_dependence_curves_for_nodes(*nodes, feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=FIGSIZE):
+    labels = next(iter(nodes)).cluster_classes if labels is None else labels
     nrows, ncols = len(nodes), len(labels)
     axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='all', sharex='all', squeeze=False, tight_layout=True)[1] if axs is None else axs
-    for idx, (name, node, axs_row) in enumerate(zip(nodes.keys(), nodes.values(), axs)):
+    for idx, (node, axs_row) in enumerate(zip(nodes, axs)):
         is_first = idx == 0
         plot_dependence_curves_for_feature(node, feature, labels=labels, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, axs=axs_row)
-        axs_row[0].set_ylabel(name + '\n' + axs_row[0].get_ylabel())
+        axs_row[0].set_ylabel(str(node) + '\n' + axs_row[0].get_ylabel())
 
 
 def plot_dependence_curves(node, features=None, labels=None, simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=FIGSIZE):
@@ -478,7 +511,7 @@ def plot_dependence_curve(node, feature, label, simplify=False, color=None, colo
     if node.feature_precisions[list(node.comparer.feature_names).index(feature)] == 0:
         df[feature] = df[feature].astype(int)
     df = pd.concat([df[df['Label'] != node.focus_class], df[df['Label'] == node.focus_class]])
-    if simplify:
+    if simplify and node.focus_class is not None:
         class_names = ['other', node.focus_class]
         df.loc[df['Label'] != node.focus_class, 'Label'] = 'other'
     plot = sns.stripplot if feature in node.categorical_features else sns.scatterplot
@@ -497,3 +530,36 @@ def plot_dependence_curve(node, feature, label, simplify=False, color=None, colo
 def _plot_counterfactual(cf, ax):
     linestyle = 'dotted' if cf.is_direction_up else 'dashed'
     return ax.axvline(cf.value, alpha=0.3, linewidth=2, color='black', linestyle=linestyle, label=str(cf))
+
+
+def plot_indiv_dependence_curve_comparisons(node, features=None, labels=None, color=None, color_label=None, alpha=None, figsize=FIGSIZE, axs=None):
+    if features is None or len(features) == 0:
+        order = calc_feature_order(make_diff_explanation(node).shap_values)[0]
+        features = node.comparer.feature_names[order]
+    for feature in features:
+        plot_indiv_dependence_curve_comparison_for_feature(node, feature, labels, color=color, color_label=color_label, alpha=alpha, figsize=figsize, axs=axs)
+        plt.show()
+
+
+def plot_indiv_dependence_curve_comparison_for_feature(node, feature, labels=None, color=None, color_label=None, alpha=None, figsize=FIGSIZE, axs=None):
+    comparer = node.comparer
+    nrows, ncols = 3, len(comparer.base_class_names)
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharex='all', sharey='row', squeeze=False, tight_layout=True)[1] if axs is None else axs
+    base_labels = comparer.base_class_names if labels is None else labels
+    get_labels = lambda clf: [clf + '.' + label for label in base_labels]
+    plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_a), color=color, color_label=color_label, alpha=alpha, axs=axs[0])
+    plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_b), color=color, color_label=color_label, alpha=alpha, axs=axs[1], show_title=False)
+    plot_dependence_curves_for_feature(make_diff_explanation(node), feature, color=color, color_label=color_label, alpha=alpha, axs=axs[2], show_title=False)
+    axs[2][0].set_ylabel(f'$s_{comparer.name_a}-s_{comparer.name_b}$')
+
+
+def make_diff_explanation(node):
+    comparer = node.comparer
+    get_labels = lambda clf: [clf + '.' + label for label in comparer.base_class_names]
+    shap_values = node.orig_shap_values[:, :, get_labels(comparer.name_a)] - node.orig_shap_values[:, :, get_labels(comparer.name_b)]
+    shap_values.output_names = list(comparer.base_class_names)
+    shap_values.data = node.orig_shap_values.data
+    cluster_classes = list(comparer.base_class_names)
+    return Explanation(node.comparer, shap_values, node.instance_indices, cluster_classes,
+                       node.orig_pred_classes, node.categorical_features, node.feature_precisions,
+                       node.orig_highlight, node.focus_class, node.parent)

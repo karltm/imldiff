@@ -10,7 +10,7 @@ from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-_DEFAULT_FIGSIZE = 3, 2
+_DEFAULT_FIGSIZE = 3, 1.75
 
 
 class NodeDoesntExistException(Exception):
@@ -411,12 +411,12 @@ def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
 def plot_dependence_curves_for_nodes(*nodes, feature, labels=None, kind='diffclf', simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=_DEFAULT_FIGSIZE):
     labels = _get_labels(next(iter(nodes)), kind, labels)
     nrows, ncols = len(nodes), len(labels)
-    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='all', sharex='all', squeeze=False)[1] if axs is None else axs
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='all', sharex='all', squeeze=False, constrained_layout=True)[1] if axs is None else axs
     for idx, (node, axs_row) in enumerate(zip(nodes, axs)):
         is_first = idx == 0
-        plot_dependence_curves_for_feature(node, feature, labels=labels, kind=kind, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, axs=axs_row)
+        plot_dependence_curves_for_feature(node, feature, labels=labels, kind=kind, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, show_legend=is_first, axs=axs_row)
         axs_row[0].set_ylabel(str(node) + '\n' + axs_row[0].get_ylabel())
-    plt.tight_layout(pad=0, w_pad=0, h_pad=0)
+    plt.subplots_adjust(wspace=.02, hspace=.02)
 
 
 def _get_labels(node, kind, labels=None):
@@ -434,28 +434,28 @@ def plot_dependence_curves(node, features=None, labels=None, kind='diffclf', sim
     features = node.features_ordered if features is None else features
     labels = _get_labels(node, kind, labels)
     nrows, ncols = len(features), len(labels)
-    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='row', squeeze=False)[1] if axs is None else axs
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharey='row', squeeze=False, constrained_layout=True)[1] if axs is None else axs
     for idx, (feature, axs_row) in enumerate(zip(features, axs)):
         is_first = idx == 0
         plot_dependence_curves_for_feature(node, feature, labels=labels, kind=kind, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, axs=axs_row)
-    plt.tight_layout(pad=0, w_pad=0, h_pad=0)
+    plt.subplots_adjust(wspace=.02, hspace=.02)
 
 
 def plot_dependence_curves_for_feature(node, feature, labels=None, kind='diffclf', simplify=False, color=None, color_label=None, alpha=None, axs=None, show_title=True, show_legend=True, figsize=_DEFAULT_FIGSIZE):
     labels = _get_labels(node, kind, labels)
     ncols = len(labels)
-    axs = plt.subplots(ncols=ncols, figsize=(ncols*figsize[0], figsize[1]), sharey='row', squeeze=False, tight_layout=True)[1][0] if axs is None else axs
+    axs = plt.subplots(ncols=ncols, figsize=(ncols*figsize[0], figsize[1]), sharey='row', squeeze=False, constrained_layout=True)[1][0] if axs is None else axs
     for idx, (label, ax) in enumerate(zip(labels, axs)):
         is_first, is_last = idx == 0, idx == len(labels) - 1
-        ax = plot_dependence_curve(node, feature, label, kind=kind, simplify=simplify, color=color, color_label=color_label, alpha=alpha, ax=ax, show_legend=is_last and show_legend)
+        ax = plot_dependence_curve(node, feature, label, kind=kind, simplify=simplify, color=color, color_label=color_label, alpha=alpha, ax=ax, show_cf_legend=is_last, show_label_legend=is_last and show_legend)
         if show_title:
             ax.set_title(f'Class {label}\'s outcome')
         if not is_first:
             ax.set_ylabel('')
-    plt.tight_layout(pad=0, w_pad=0, h_pad=0)
+    plt.subplots_adjust(wspace=.02, hspace=.02)
 
 
-def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, color=None, color_label=None, alpha=None, ax=None, show_legend=True):
+def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, color=None, color_label=None, alpha=None, ax=None, show_cf_legend=True, show_label_legend=True):
     class_names = node.occuring_classes
     if kind == 'indiv':
         s = node.indiv_shap_values[:, feature, label]
@@ -488,11 +488,14 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
         color_label = 'Label'
         hue_order = class_names
         palette = _get_colors(node)
-    plot = sns.stripplot if feature in node.categorical_features else sns.scatterplot
-    ax = plot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=hue_order, palette=palette, alpha=alpha, ax=ax, linewidth=0)
+    if feature in node.categorical_features:
+        order = np.unique(node.root.data[feature])
+        ax = sns.stripplot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=hue_order, palette=palette, alpha=alpha, ax=ax, linewidth=0, order=order)
+    else:
+        ax = sns.scatterplot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=hue_order, palette=palette, alpha=alpha, ax=ax, linewidth=0)
     if kind == 'indiv-diff':
-        ax.axhline(0, linewidth=1, alpha=0.5, color='black')
-    if show_legend:
+        ax.axhline(0, linewidth=1, alpha=0.33, color='black')
+    if show_label_legend:
         if color is None:
             legend_sc = ax.legend(title=color_label, loc='center left', bbox_to_anchor=(1, 0.5), frameon=False)
             ax.add_artist(legend_sc)
@@ -507,7 +510,7 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
     else:
         ax.get_legend().remove()
     lines = [_plot_counterfactual(cf, ax=ax) for cf in node.counterfactuals[feature]]
-    if show_legend and len(lines) > 0:
+    if show_cf_legend and len(lines) > 0:
         ax.legend(lines, [line.get_label() for line in lines], title='Counterfactuals')
     return ax
 
@@ -530,16 +533,16 @@ def _plot_counterfactual(cf, ax):
 def plot_indiv_dependence_curve_comparison_for_feature(node, feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, figsize=_DEFAULT_FIGSIZE, axs=None):
     comparer = node.comparer
     nrows, ncols = 3, len(comparer.base_class_names)
-    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharex='all', sharey='all', squeeze=False)[1] if axs is None else axs
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharex='all', sharey='all', squeeze=False, constrained_layout=True)[1] if axs is None else axs
     base_labels = comparer.base_class_names if labels is None else labels
     get_labels = lambda clf: [clf + '.' + label for label in base_labels]
     plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_a), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[0], show_title=False, show_legend=False)
     plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_b), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[1], show_title=False)
     plot_dependence_curves_for_feature(node, feature, base_labels, kind='indiv-diff', color=color, color_label=color_label, alpha=alpha, axs=axs[2], show_legend=False)
+    plt.subplots_adjust(wspace=.02, hspace=.02)
     axs[2][0].set_ylabel(f'$s_{comparer.name_b}-s_{comparer.name_a}$')
     for i in range(ncols):
         axs[0][i].set_title(axs[2][i].get_title())
         axs[2][i].set_title(None)
     axs[0][0].set_ylabel(f'$s_{comparer.name_a}({feature})$')
     axs[1][0].set_ylabel(f'$s_{comparer.name_b}({feature})$')
-    plt.tight_layout(pad=0, w_pad=0, h_pad=0)

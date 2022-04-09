@@ -8,7 +8,6 @@ from explainers import calc_feature_order, make_diff_shap_values
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, counterfactuals_to_constraint_matrix
 from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
-from mpl_toolkits.axes_grid1 import make_axes_locatable
 from matplotlib.ticker import FormatStrFormatter
 
 _DEFAULT_FIGSIZE = 3.5, 2
@@ -20,7 +19,7 @@ class NodeDoesntExistException(Exception):
 
 class Explanation:
     def __init__(self, comparer, indiv_shap_values, diffclf_shap_values, instance_indices, cluster_classes, pred_classes, categorical_features,
-                 feature_precisions, highlight, focus_class=None, parent=None, counterfactuals=None):
+                 feature_precisions, highlight=None, focus_class=None, parent=None, counterfactuals=None):
         self.comparer = comparer
         self.parent = parent
         self.root = self if parent is None else parent.root
@@ -33,8 +32,6 @@ class Explanation:
         self.data = pd.DataFrame(self.diffclf_shap_values.data, columns=self.diffclf_shap_values.feature_names, index=instance_indices)
         self.focus_class = focus_class
         self.feature_precisions = feature_precisions
-        self.orig_highlight = highlight
-        self.highlight = highlight[instance_indices]
         self.cluster_classes = cluster_classes
         self.categorical_features = categorical_features
         self.orig_pred_classes = pred_classes
@@ -43,12 +40,16 @@ class Explanation:
         self.class_counts = pd.Series(self.pred_classes).value_counts()
         self.diffclf_feature_order, self.diffclf_feature_importances = calc_feature_order(self.diffclf_shap_values)
         self.diff_feature_order, self.diff_feature_importances = calc_feature_order(self.diff_shap_values)
-        self.counterfactuals = counterfactuals[repr(self)] if counterfactuals is not None else (
-            parent.counterfactuals if parent is not None and
-                                      self.class_counts.get(self.focus_class) ==
-                                      parent.class_counts.get(self.focus_class) else
-            self._calculate_counterfactuals()
-        )
+        self.counterfactuals = self._get_or_create_counterfactuals(counterfactuals)
+
+    def _get_or_create_counterfactuals(self, counterfactuals):
+        if counterfactuals is not None:
+            return counterfactuals[repr(self)]
+        if self.parent is not None and\
+            self.class_counts.get(self.focus_class) ==\
+            self.parent.class_counts.get(self.focus_class):
+            return self.parent.counterfactuals
+        return self._calculate_counterfactuals()
 
     def _calculate_counterfactuals(self):
         counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
@@ -60,12 +61,23 @@ class Explanation:
         return counterfactuals
 
     @property
+    def highlight(self):
+        if self.focus_class is None:
+            return np.in1d(self.pred_classes, self.comparer.difference_class_names)
+        return self.pred_classes == self.focus_class
+
+    @property
     def features_ordered(self):
         return self.comparer.feature_names[self.diffclf_feature_order]
 
     @property
     def features_with_counterfactuals(self):
-        return np.array([feature for feature in self.features_ordered if len(self.counterfactuals[feature]) > 0])
+        return np.array([feature for feature in self.features_ordered if len(self.get_counterfactuals()[feature]) > 0])
+
+    def get_counterfactuals(self):
+        if self.focus_class is None or self.focus_class not in self.counterfactuals:
+            return dict([(feature, []) for feature in self.comparer.feature_names])
+        return self.counterfactuals[self.focus_class]
 
     @property
     def features_without_counterfactuals(self):
@@ -78,7 +90,7 @@ class Explanation:
             instance_indices = self.instance_indices[by]
         return Explanation(self.comparer, self.orig_indiv_shap_values, self.orig_diffclf_shap_values, instance_indices,
                            self.cluster_classes, self.orig_pred_classes, self.categorical_features,
-                           self.feature_precisions, self.orig_highlight, self.focus_class, self)
+                           self.feature_precisions, None, self.focus_class, self)
 
     def plot_indiv_feature_dependence(self, *features, classes=None, color=None, color_label=None, figsize=_DEFAULT_FIGSIZE,
                                       alpha=None, axs=None, simplify=False, show_legend=True):
@@ -158,7 +170,7 @@ class Explanation:
         if len(include_features) == 0:
             include_features = self.features_with_counterfactuals
         return counterfactuals_to_constraint_matrix(self.comparer.feature_names, self.feature_precisions,
-                                                    include_features, self.counterfactuals)
+                                                    include_features, self.get_counterfactuals())
 
 
 class ExplanationNode(Explanation):
@@ -169,7 +181,6 @@ class ExplanationNode(Explanation):
         self.distance_matrix = distance_matrix
         self.linkage_matrix = linkage_matrix
         self.cluster_name = _make_cluster_name(parent, cluster_node)
-        self.node_name = _make_node_name(parent, instance_indices, cluster_node)
         super(ExplanationNode, self).__init__(comparer, indiv_shap_values, diffclf_shap_values, instance_indices, cluster_classes,
                                               pred_classes, categorical_features, feature_precisions,
                                               highlight, focus_class, parent, counterfactuals)
@@ -185,13 +196,10 @@ class ExplanationNode(Explanation):
         return ExplanationNode(self.comparer, self.orig_indiv_shap_values, self.orig_diffclf_shap_values, cluster_node,
                                instance_indices, self.cluster_classes, self.orig_pred_classes, self.distance_matrix,
                                self.linkage_matrix, self.categorical_features, self.feature_precisions,
-                               self.orig_highlight, self.focus_class, self, counterfactuals)
+                               None, self.focus_class, self, counterfactuals)
 
     def __repr__(self):
         return self.cluster_name
-
-    def __str__(self):
-        return self.node_name
 
     @property
     def distance(self):
@@ -206,7 +214,6 @@ class ExplanationNode(Explanation):
             'pred_classes': self.orig_pred_classes,
             'distance_matrix': self.distance_matrix,
             'linkage_matrix': self.linkage_matrix,
-            'highlight': self.orig_highlight,
             'counterfactuals': self._get_all_counterfactuals()
         }
 
@@ -214,7 +221,7 @@ class ExplanationNode(Explanation):
         childs = [n for n in [self.left, self.right] if n is not None]
         child_cfs = [child._get_all_counterfactuals().items() for child in childs]
         child_cfs = [item for sublist in child_cfs for item in sublist]
-        child_cfs = [(str(self), self.counterfactuals)] + child_cfs
+        child_cfs = [(repr(self), self.counterfactuals)] + child_cfs
         child_cfs = dict(child_cfs)
         return child_cfs
 
@@ -227,26 +234,25 @@ class ExplanationNode(Explanation):
             return self
 
     def get_left(self):
-        return self.left
+        node = self.left
+        node.focus_class = self.focus_class
+        return node
 
     def get_right(self):
-        return self.right
+        node = self.right
+        node.focus_class = self.focus_class
+        return node
 
-    def get_left_node(self):
-        return self.get_last_child_before_focus_class_split().left
-
-    def get_right_node(self):
-        return self.get_last_child_before_focus_class_split().right
-
-    def get_last_child_before_focus_class_split(self):
+    def descend(self):
+        """Descend until the focus instances would be split into separate clusters"""
         if len(self.data) == 1:
             return self
         left = self.get_left()
         right = self.get_right()
         if left is not None and np.array_equal(self.instance_indices[self.highlight], left.instance_indices[left.highlight]):
-            return left
+            return left.descend()
         if right is not None and np.array_equal(self.instance_indices[self.highlight], right.instance_indices[right.highlight]):
-            return right
+            return right.descend()
         return self
 
     def plot_dendrogram(self):
@@ -254,19 +260,6 @@ class ExplanationNode(Explanation):
         hierarchy.dendrogram(self.linkage_matrix, orientation='right', ax=ax, no_labels=True)
         ax.set_title('Dendrogram')
         plt.show()
-
-
-def _make_node_name(parent, instance_indices, cluster_node):
-    if parent is None:
-        return 'Root'
-    if parent.root.highlight.sum() == parent.root.orig_highlight[instance_indices].sum():
-        return 'Main'
-    is_left_child = parent.cluster_node.get_left().id == cluster_node.id
-    if parent.node_name == 'Main' or parent.node_name == 'Root':
-        return 'Node 1' if is_left_child else 'Node 2'
-    if parent.highlight.sum() == parent.root.orig_highlight[instance_indices].sum():
-        return parent.node_name
-    return parent.node_name + ('.1' if is_left_child else '.2')
 
 
 def _make_cluster_name(parent, cluster_node):
@@ -387,9 +380,9 @@ def _has_focus_class_instances(n: ExplanationNode):
 
 def plot_2d(node: ExplanationNode, x, y):
     node.comparer.plot_decision_boundaries(node.root.data, type='bin-diffclf', x=x, y=y, alpha=0.5)
-    for cf in node.counterfactuals[x]:
+    for cf in node.get_counterfactuals()[x]:
         plt.axvline(cf.value, linewidth=1, color='black', linestyle='--')
-    for cf in node.counterfactuals[y]:
+    for cf in node.get_counterfactuals()[y]:
         plt.axhline(cf.value, linewidth=1, color='black', linestyle='--')
 
 
@@ -401,9 +394,9 @@ def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
     ylim = X[y].min() - 0.5, X[y].max() + 0.5
     comparer.plot_decision_boundaries(node.data, xlim=xlim, ylim=ylim, fig=fig, ax=ax)
     handle = plt if ax is None else ax
-    for cf in node.counterfactuals['x1']:
+    for cf in node.get_counterfactuals()[x]:
         handle.axvline(cf.value, linewidth=1, color='black', linestyle='--')
-    for cf in node.counterfactuals['x2']:
+    for cf in node.get_counterfactuals()[y]:
         handle.axhline(cf.value, linewidth=1, color='black', linestyle='--')
 
 
@@ -498,8 +491,8 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
             class_names = ['other', node.focus_class]
             df.loc[df['Label'] != node.focus_class, 'Label'] = 'other'
         else:
-            class_names = ['equal', 'different']
-            df['Label'] = ['different' if is_diff else 'equal' for is_diff in node.highlight]
+            class_names = ['equal', 'different'] if node.focus_class is None else ['other', node.focus_class]
+            df['Label'] = [class_names[1] if is_highlighted else class_names[0] for is_highlighted in node.highlight]
     if color is not None:
         if color_label is not None:
             df[color_label] = color
@@ -524,7 +517,7 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
         ax.add_artist(legend_sc)
     else:
         ax.get_legend().remove()
-    lines = [_plot_counterfactual(cf, ax=ax) for cf in node.counterfactuals[feature]]
+    lines = [_plot_counterfactual(cf, ax=ax) for cf in node.get_counterfactuals()[feature]]
     if show_cf_legend and len(lines) > 0:
         ax.legend(lines, [line.get_label() for line in lines], title='Counterfactuals')
     if node.feature_precisions[list(node.comparer.feature_names).index(feature)] == 0:

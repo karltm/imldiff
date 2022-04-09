@@ -8,7 +8,6 @@ from explainers import calc_feature_order, make_diff_shap_values
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, counterfactuals_to_constraint_matrix
 from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
-from matplotlib.ticker import FormatStrFormatter
 
 _DEFAULT_FIGSIZE = 3.5, 2
 
@@ -93,13 +92,13 @@ class Explanation:
                            self.feature_precisions, None, self.focus_class, self)
 
     def plot_indiv_feature_dependence(self, *features, classes=None, color=None, color_label=None, figsize=_DEFAULT_FIGSIZE,
-                                      alpha=None, axs=None, simplify=False, show_legend=True):
+                                      alpha=None, axs=None, simplify=False, show_legend=True, separate_rows=False):
         if features is None or len(features) == 0:
             features = self.comparer.feature_names[self.diff_feature_order]
         for feature in features:
             plot_indiv_dependence_curve_comparison_for_feature(self, feature, classes, simplify=simplify, color=color,
                                                                color_label=color_label, alpha=alpha, figsize=figsize,
-                                                               axs=axs, show_legend=show_legend)
+                                                               axs=axs, show_legend=show_legend, separate_rows=separate_rows)
             if len(features) > 1:
                 plt.show()
 
@@ -521,8 +520,15 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
     if show_cf_legend and len(lines) > 0:
         ax.legend(lines, [line.get_label() for line in lines], title='Counterfactuals')
     if node.feature_precisions[list(node.comparer.feature_names).index(feature)] == 0:
-        ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+        ax.set_xticklabels([_convert_int(label.get_text()) for label in ax.get_xticklabels()])
     return ax
+
+
+def _convert_int(v):
+    try:
+        return str(int(float(v)))
+    except ValueError:
+        return v
 
 
 def _is_categorical_color(node, color):
@@ -548,11 +554,11 @@ def _plot_counterfactual(cf, ax):
     return ax.axvline(cf.value, alpha=0.3, linewidth=2, color='black', linestyle=linestyle, label=str(cf))
 
 
-def plot_indiv_dependence_curve_comparison_for_feature(node, feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, figsize=_DEFAULT_FIGSIZE, axs=None, show_legend=True, adjust=True):
+def plot_indiv_dependence_curve_comparison_for_feature(node, feature, labels=None, simplify=False, color=None, color_label=None, alpha=None, figsize=_DEFAULT_FIGSIZE, axs=None, show_legend=True, adjust=True, separate_rows=False):
     comparer = node.comparer
     base_labels = comparer.base_class_names if labels is None else labels
     nrows, ncols = 3, len(base_labels)
-    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharex='all', sharey='all', squeeze=False, constrained_layout=True)[1] if axs is None else axs
+    axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharex='all', sharey='row' if separate_rows else 'all', squeeze=False, constrained_layout=True)[1] if axs is None else axs
     get_labels = lambda clf: [clf + '.' + label for label in base_labels]
     plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_a), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[0], show_title=False, show_label_legend=False, adjust=False)
     plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_b), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[1], show_title=False, show_label_legend=show_legend, adjust=False)

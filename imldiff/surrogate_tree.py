@@ -103,7 +103,7 @@ def extract_rules(model, feature_names, classes_to_include, feature_order=None, 
     constraints = constraints[rule_order]
     node_ids = np.array(node_ids)[rule_order]
 
-    return constraints, rules, class_occurences, labels, rule_order
+    return constraints, rules, class_occurences, labels, node_ids, rule_order
 
 
 def tree_to_rules(tree: DecisionTreeClassifier, feature_names, feature_order=None, precisions=None, latex=False):

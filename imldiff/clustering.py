@@ -8,7 +8,7 @@ from explainers import calc_feature_order, make_diff_shap_values
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, counterfactuals_to_constraint_matrix
 from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
-from matplotlib.ticker import FormatStrFormatter
+from matplotlib.ticker import FormatStrFormatter, MaxNLocator
 
 _DEFAULT_FIGSIZE = 3.5, 2
 
@@ -524,6 +524,7 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
         ax.legend(lines, [line.get_label() for line in lines], title='Counterfactuals')
     if node.feature_precisions[list(node.comparer.feature_names).index(feature)] == 0:
         ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+        ax.xaxis.set_major_locator(MaxNLocator(nbins='auto', integer=True))
     return ax
 
 

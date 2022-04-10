@@ -8,6 +8,7 @@ from explainers import calc_feature_order, make_diff_shap_values
 from util import RuleClassifier, constraint_matrix_to_rules, find_counterfactuals, counterfactuals_to_constraint_matrix
 from util import evaluate_predictions
 from sklearn.neighbors import KNeighborsClassifier
+from matplotlib.ticker import FormatStrFormatter
 
 _DEFAULT_FIGSIZE = 3.5, 2
 
@@ -234,12 +235,14 @@ class ExplanationNode(Explanation):
 
     def get_left(self):
         node = self.left
-        node.focus_class = self.focus_class
+        if node is not None:
+            node.focus_class = self.focus_class
         return node
 
     def get_right(self):
         node = self.right
-        node.focus_class = self.focus_class
+        if node is not None:
+            node.focus_class = self.focus_class
         return node
 
     def descend(self):
@@ -306,12 +309,14 @@ def make_clustering(comparer, indiv_shap_values, diffclf_shap_values, focus_clas
     return node
 
 
-def eval_clusterings(explanations_per_class: dict[str, ExplanationNode], X_test, shap_values_test):
+def eval_clusterings(node: ExplanationNode, X_test, shap_values_test):
+    node = node.root
     metrics = []
-    for class_name, explanation in explanations_per_class.items():
-        if explanation.highlight.sum() == 0:
+    for class_name in node.comparer.class_names:
+        node.focus_class = class_name
+        if node.highlight.sum() == 0:
             continue
-        for distance, nodes in get_nodes_per_level(explanation).items():
+        for distance, nodes in get_nodes_per_level(node).items():
             metric = eval_clusterings_for_class(class_name, nodes, X_test, shap_values_test)
             metric['Distance'] = distance
             metrics.append(metric)
@@ -349,8 +354,8 @@ def get_nodes_per_level(node):
 
 
 def _make_cluster_discriminator(nodes):
-    X = np.concatenate([node.shap_values.values.reshape((node.shap_values.shape[0], -1)) for node in nodes])
-    y = np.concatenate([np.repeat(str(node), len(node.shap_values.values)) for node in nodes])
+    X = np.concatenate([node.diffclf_shap_values.values.reshape((node.diffclf_shap_values.shape[0], -1)) for node in nodes])
+    y = np.concatenate([np.repeat(str(node), len(node.diffclf_shap_values.values)) for node in nodes])
     knn = KNeighborsClassifier(n_neighbors=1)
     knn.fit(X, y)
     return knn
@@ -361,13 +366,13 @@ def _filter_nodes_with_equal_distance(nodes_per_level):
 
 
 def _nodes_flat(node: ExplanationNode):
-    children = [_nodes_flat(n) for n in [node.left, node.right] if n is not None and n.highlight.sum() > 0]
+    children = [_nodes_flat(n) for n in [node.descend().get_left(), node.descend().get_right()] if n is not None and n.highlight.sum() > 0]
     return [node] + [item for sublist in children for item in sublist]
 
 
 def _cut_nodes(node: ExplanationNode, min_distance):
-    if any([_has_focus_class_instances(n) and n.distance >= min_distance for n in [node.left, node.right]]):
-        children = [_cut_nodes(n, min_distance) for n in [node.left, node.right] if _has_focus_class_instances(n)]
+    if any([_has_focus_class_instances(n) and n.distance >= min_distance for n in [node.descend().get_left(), node.descend().get_right()]]):
+        children = [_cut_nodes(n, min_distance) for n in [node.descend().get_left(), node.descend().get_right()] if _has_focus_class_instances(n)]
         return [item for sublist in children for item in sublist]
     else:
         return [node]
@@ -505,10 +510,8 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
         hue_order = class_names
         palette = _get_colors(node)
     if feature in node.categorical_features:
-        order = np.unique(node.root.data[feature])
-        ax = sns.stripplot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=hue_order, palette=palette, alpha=alpha, ax=ax, linewidth=0, order=order)
-    else:
-        ax = sns.scatterplot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=hue_order, palette=palette, alpha=alpha, ax=ax, linewidth=0)
+        df[feature] = _jitter(df[feature])
+    ax = sns.scatterplot(data=df, x=df.columns[0], y=df.columns[1], hue=color_label, hue_order=hue_order, palette=palette, alpha=alpha, ax=ax, linewidth=0)
     if kind == 'indiv-diff':
         ax.axhline(0, linewidth=1, alpha=0.33, color='black')
     if show_label_legend and _is_categorical_color(node, color):
@@ -520,15 +523,12 @@ def plot_dependence_curve(node, feature, label, kind='diffclf', simplify=False, 
     if show_cf_legend and len(lines) > 0:
         ax.legend(lines, [line.get_label() for line in lines], title='Counterfactuals')
     if node.feature_precisions[list(node.comparer.feature_names).index(feature)] == 0:
-        ax.set_xticklabels([_convert_int(label.get_text()) for label in ax.get_xticklabels()])
+        ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
     return ax
 
 
-def _convert_int(v):
-    try:
-        return str(int(float(v)))
-    except ValueError:
-        return v
+def _jitter(values, j=0):
+    return values + np.random.normal(j, 0.1, values.shape)
 
 
 def _is_categorical_color(node, color):

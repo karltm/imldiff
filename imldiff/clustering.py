@@ -419,7 +419,8 @@ def plot_dependence_curves_for_nodes(*nodes, feature, labels=None, kind='diffclf
                                            color_label=color_label, alpha=alpha, show_title=is_first,
                                            show_cf_legend=not have_equal_focus_instances or is_last,
                                            show_label_legend=is_first and show_legend, axs=axs_row, adjust=False)
-        axs_row[0].set_ylabel(node_name + '\n' + axs_row[0].get_ylabel())
+        title = 'Root Node' if node_name == 'root' else 'Node ' + node_name
+        axs_row[0].set_ylabel(title + '\n' + axs_row[0].get_ylabel())
     if adjust:
         if separate_rows:
             plt.subplots_adjust(wspace=.02)
@@ -454,7 +455,7 @@ def plot_dependence_curves(node, features=None, labels=None, kind='diffclf', sim
         is_first = idx == 0
         plot_dependence_curves_for_feature(node, feature, labels=labels, kind=kind, simplify=simplify, color=color, color_label=color_label, alpha=alpha, show_title=is_first, axs=axs_row, show_label_legend=show_legend, adjust=False)
     if adjust:
-        plt.subplots_adjust(wspace=.02, hspace=.02)
+        plt.subplots_adjust(wspace=.02, hspace=.4)
         draw_colorbar_if_necessary(node, color, color_label)
 
 

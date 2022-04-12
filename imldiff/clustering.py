@@ -562,8 +562,8 @@ def plot_indiv_dependence_curve_comparison_for_feature(node, feature, labels=Non
     nrows, ncols = 3, len(base_labels)
     axs = plt.subplots(ncols=ncols, nrows=nrows, figsize=(ncols*figsize[0], nrows*figsize[1]), sharex='all', sharey='row' if separate_rows else 'all', squeeze=False, constrained_layout=True)[1] if axs is None else axs
     get_labels = lambda clf: [clf + '.' + label for label in base_labels]
-    plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_a), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[0], show_title=False, show_label_legend=False, adjust=False)
-    plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_b), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[1], show_title=False, show_label_legend=show_legend, adjust=False)
+    plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_a), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[0], show_title=False, show_label_legend=False, show_cf_legend=False, adjust=False)
+    plot_dependence_curves_for_feature(node, feature, get_labels(comparer.name_b), kind='indiv', simplify=simplify, color=color, color_label=color_label, alpha=alpha, axs=axs[1], show_title=False, show_label_legend=show_legend, show_cf_legend=False, adjust=False)
     plot_dependence_curves_for_feature(node, feature, base_labels, kind='indiv-diff', color=color, color_label=color_label, alpha=alpha, axs=axs[2], show_label_legend=False, adjust=False)
     for i in range(ncols):
         axs[0][i].set_title(axs[2][i].get_title())

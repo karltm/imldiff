@@ -49,16 +49,19 @@ class Explanation:
             self.class_counts.get(self.focus_class) ==\
             self.parent.class_counts.get(self.focus_class):
             return self.parent.counterfactuals
-        return self._calculate_counterfactuals()
+        return self.calculate_counterfactuals()
 
-    def _calculate_counterfactuals(self):
+    def calculate_counterfactuals(self):
         counterfactuals = dict([(feature, []) for feature in self.comparer.feature_names])
         if np.sum(self.highlight) == 0 or self.focus_class is None:
             return counterfactuals
         counterfactuals |= find_counterfactuals(self.comparer, self.data.iloc[self.highlight].to_numpy(),
                                                 self.root.data.to_numpy(), self.feature_precisions,
                                                 list(self.comparer.class_names).index(self.focus_class))
-        return counterfactuals
+        if not hasattr(self, 'counterfactuals'):
+            self.counterfactuals = {}
+        self.counterfactuals[self.focus_class] = counterfactuals
+        return self.counterfactuals
 
     @property
     def highlight(self):

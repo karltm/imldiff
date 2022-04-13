@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from difference_models import BinaryDifferenceClassifier, MulticlassDifferenceClassifier
 from scipy.special import logsumexp
-from util import get_index_and_name, plot_decision_boundary
+from util import get_index_and_name, plot_decision_boundary, DEFAULT_PLOT_SIZE, draw_colorbar_if_necessary
 
 
 class ModelComparer:
@@ -118,15 +118,15 @@ class ModelComparer:
     def predict_mclass_diff_log_odds(self, X):
         return _calc_log_odds_from_log_proba(self.mclass_diff_clf.predict_log_proba(X))
 
-    def plot_individual_clf_decision_boundaries(self, X, X_display=None, y_true=None, separate=False,
+    def plot_individual_clf_decision_boundaries(self, X, X_display=None, y_true=None, separate=False, adjust=True,
                                                 kind='label', idx_x=0, idx_y=1, zlim=None, figsize=None, **kwargs):
         class_names = None
         if kind == 'label':
             class_names = self.mclass_diff_clf.base_classes_
             if not separate:
                 if figsize is None:
-                    figsize = (2*7, 7)
-                fig, axs = plt.subplots(ncols=2, sharey=True, figsize=figsize, constrained_layout=True)
+                    figsize = (2*DEFAULT_PLOT_SIZE[0], DEFAULT_PLOT_SIZE[1])
+                fig, axs = plt.subplots(ncols=2, sharey='row', figsize=figsize, constrained_layout=True)
                 for clf_name, predict, ax in zip(self.classifier_names,
                                                  [self.clf_a.predict, self.clf_b.predict],
                                                  axs):
@@ -134,9 +134,12 @@ class ModelComparer:
                                            predict=predict, class_names=class_names, zlim=zlim,
                                            idx_x=idx_x, idx_y=idx_y,
                                            fig=fig, ax=ax, **kwargs)
+                axs[1].set_ylabel(None)
+                if adjust:
+                    plt.subplots_adjust(wspace=.02, hspace=.02)
             else:
                 if figsize is None:
-                    figsize = (2*7, len(self.base_classes)*7)
+                    figsize = (2*DEFAULT_PLOT_SIZE[0], len(self.base_classes)*DEFAULT_PLOT_SIZE[1])
                 fig, axs = plt.subplots(nrows=len(self.base_classes), ncols=2, sharex=True, sharey=True,
                                         figsize=figsize, constrained_layout=True, squeeze=False)
                 
@@ -172,16 +175,22 @@ class ModelComparer:
                 plot_classes = self.base_classes
 
             if figsize is None:
-                figsize = (2*7, len(plot_classes)*7)
+                figsize = (2*DEFAULT_PLOT_SIZE[0], len(plot_classes)*DEFAULT_PLOT_SIZE[1])
             fig, axs = plt.subplots(nrows=len(plot_classes), ncols=2, sharex=True, sharey=True,
                                     figsize=figsize, constrained_layout=True, squeeze=False)
             for clf_name, predict, axs_row in zip(self.classifier_names, predict_functions, axs.T):
+                is_first = clf_name == self.classifier_names[0]
                 for class_idx, ax in zip(plot_classes, axs_row.flatten()):
                     predict_class = lambda X: predict(X)[:, class_idx]
                     plot_decision_boundary(X, y_true, clf_name, self.feature_names, X_display,
                                            predict=predict_class, class_names=class_names, zlim=zlim,
-                                           idx_x=idx_x, idx_y=idx_y,
+                                           idx_x=idx_x, idx_y=idx_y, show_colorbar=False,
                                            fig=fig, ax=ax, **kwargs)
+                    if not is_first:
+                        ax.set_ylabel(None)
+            if adjust:
+                plt.subplots_adjust(wspace=.02, hspace=.02)
+                draw_colorbar_if_necessary(zlim, fig, axs)
 
     def check_feature(self, feature):
         return get_index_and_name(self.feature_names, feature)
@@ -189,7 +198,7 @@ class ModelComparer:
     def check_class(self, label):
         return get_index_and_name(self.class_names, label)
 
-    def plot_decision_boundaries(self, X, X_display=None, kind='label', x=0, y=1,
+    def plot_decision_boundaries(self, X, X_display=None, kind='label', x=0, y=1, adjust=True,
                                  xlim=None, ylim=None, zlim=None, type='mclass-diffclf', fig=None, ax=None, **kwargs):
         X = X.to_numpy() if isinstance(X, pd.DataFrame) else X
         x_idx, x_name = self.check_feature(x)
@@ -210,7 +219,7 @@ class ModelComparer:
                 raise Exception('invalid type: ' + str(type))
 
             if fig is None or ax is None:
-                fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
+                fig, ax = plt.subplots(figsize=DEFAULT_PLOT_SIZE, constrained_layout=True)
             plot_decision_boundary(X, z,
                                    feature_names=self.feature_names,
                                    X_display=X_display,
@@ -239,20 +248,29 @@ class ModelComparer:
 
             if type == 'bin-diffclf':
                 if fig is None or ax is None:
-                    fig, ax = plt.subplots(figsize=(7, 7), constrained_layout=True)
+                    fig, ax = plt.subplots(figsize=DEFAULT_PLOT_SIZE, constrained_layout=True)
                 plot_decision_boundary(X, binary_diff_predictions, feature_names=self.feature_names, predict=predict_binary,
                                        zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim,
                                        z_label=outcome_space_readable + ' of different outcomes', **kwargs)
             elif type == 'mclass-diffclf':
                 nclasses = len(self.mclass_diff_clf.base_classes_)
-                fig, axs = plt.subplots(nrows=nclasses, ncols=nclasses, sharex=True, sharey=True,
-                                        figsize=(nclasses*7, nclasses*7), constrained_layout=True)
-                for class_idx, ax in zip(self.mclass_diff_clf.classes_, axs.flatten()):
+                fig, axs = plt.subplots(nrows=nclasses, ncols=nclasses, sharex='all', sharey='all',
+                                        figsize=(nclasses*DEFAULT_PLOT_SIZE[0], nclasses*DEFAULT_PLOT_SIZE[1]),
+                                        constrained_layout=True)
+                row_len = np.sqrt(len(self.mclass_diff_clf.classes_))
+                for idx, (class_idx, ax) in enumerate(zip(self.mclass_diff_clf.classes_, axs.flatten())):
+                    is_last_of_row = idx % row_len == row_len - 1
                     class_name = str(self.mclass_diff_clf.class_tuples_[class_idx])
                     predict = lambda X: predict_multiclass(X)[:, class_idx]
                     plot_decision_boundary(X, diff_predictions[:, class_idx], class_name, self.feature_names,
                                            predict=predict, zlim=zlim, fig=fig, ax=ax, xlim=xlim, ylim=ylim,
+                                           show_colorbar=False,
                                            z_label=f'{outcome_space_readable} of {class_name}', **kwargs)
+                    if is_last_of_row:
+                        ax.set_ylabel(None)
+                if adjust:
+                    plt.subplots_adjust(wspace=.02, hspace=.2)
+                    draw_colorbar_if_necessary(zlim, fig, axs)
             else:
                 raise Exception('invalid type: ' + str(type))
                 
@@ -262,7 +280,8 @@ class ModelComparer:
         cm = confusion_matrix(pred_a, pred_b, labels=self.base_classes)
         disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=self.base_classes)
         if ax is None:
-            _, ax = plt.subplots(constrained_layout=True)
+            s = 1.75 * len(self.base_classes)
+            _, ax = plt.subplots(figsize=(s, s), constrained_layout=True)
         disp.plot(ax=ax, colorbar=False)
         ax.set_ylabel('predictions of ' + self.name_a)
         ax.set_xlabel('predictions of ' + self.name_b)

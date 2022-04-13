@@ -7,9 +7,11 @@ import numpy as np
 from shap.plots import colors
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 from sklearn.metrics import classification_report, precision_recall_fscore_support
+from shap.plots.colors import red_blue
 
 
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
+DEFAULT_PLOT_SIZE = (6, 5)
 
 def get_index_and_name(names, index_or_name):
     if isinstance(index_or_name, str):
@@ -142,7 +144,7 @@ def calc_constraint_error(feature_names, constraints_true, constraints_test, ind
 def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=None, predict=None,
                            idx_x=0, idx_y=1, class_names=None, zlim=None, mesh_step_size=.5,
                            fig=None, ax=None, xlim=None, ylim=None, predict_value_names=None, predict_value_order=None,
-                           show_contour_legend=False, z_label=None, **kwargs):
+                           show_contour_legend=False, z_label=None, show_colorbar=True, **kwargs):
     """
     - X: instances to plot
     - z: color of instances
@@ -155,10 +157,8 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
     - zlim: set this to the range of values if predict returns a continuous variable, e.g. (0, 1)
     - fig, ax
     """
-
-
     if fig is None or ax is None:
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=DEFAULT_PLOT_SIZE)
 
     if class_names is None and zlim is None:
         if z.dtype == int or z.dtype == bool:
@@ -172,9 +172,6 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
     if z is None:
         z = predict(X)
 
-    predict_value_names = class_names if predict_value_names is None else predict_value_names
-    predict_value_order = range(len(predict_value_names)) if predict_value_order is None else predict_value_order
-
     draw_contours = predict is not None and X.shape[1] == 2
     if draw_contours:
         if xlim is None:
@@ -186,6 +183,8 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         z_pred = z_pred.reshape(xx.shape)
 
     if class_names is not None:
+        predict_value_names = class_names if predict_value_names is None else predict_value_names
+        predict_value_order = range(len(predict_value_names)) if predict_value_order is None else predict_value_order
         legend1 = None
         if draw_contours:
             levels = np.arange(len(predict_value_names) + 1)
@@ -208,7 +207,8 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         if draw_contours:
             levels = np.linspace(zlim[0], zlim[1], 21)
             cs = ax.contourf(xx, yy, z_pred, levels, cmap=colors.red_blue, alpha=.8)
-            fig.colorbar(cs, ax=ax, shrink=0.9, label=z_label)
+            if show_colorbar:
+                fig.colorbar(cs, ax=ax, shrink=0.9, label=z_label)
         ax.scatter(X[:, idx_x], X[:, idx_y], c=z, cmap=colors.red_blue, vmin=zlim[0], vmax=zlim[1], edgecolors='k', **kwargs)
 
     if feature_names is not None:
@@ -220,6 +220,15 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
         ax.set_xlim(xlim)
     if ylim is not None:
         ax.set_ylim(ylim)
+
+
+def draw_colorbar_if_necessary(zlim, fig=None, axs=None):
+    norm = plt.Normalize(*zlim)
+    sm = plt.cm.ScalarMappable(cmap=red_blue, norm=norm)
+    sm.set_array([])
+    fig = plt.gca().figure if fig is None else fig
+    axs = fig.axes if axs is None else axs
+    fig.colorbar(sm, ax=axs, shrink=0.9, pad=0.01)
 
 
 class CombinationClassifier:

@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.tree import DecisionTreeClassifier, plot_tree
 from sklearn.tree._tree import Tree, TREE_UNDEFINED
-from util import plot_decision_boundary, constraint_matrix_to_rules, evaluate, RuleClassifier
+from util import plot_decision_boundary, constraint_matrix_to_rules, evaluate, RuleClassifier, DEFAULT_PLOT_SIZE
 from sklearn.metrics import classification_report, precision_recall_fscore_support
 
 
@@ -39,7 +39,7 @@ def plot_surrogate_tree(model, feature_names, class_names=None, precision=3, fig
 
 
 def plot_rules_of_tree_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
-                                 rule_order, feature_x=0, feature_y=1, figsize=(7, 7)):
+                                 rule_order, feature_x=0, feature_y=1, figsize=(6, 5)):
     leaf_labels = ['other'] + list(np.argsort(rule_order) + 1)
     leaf_label_order = [0] + list(rule_order + 1)
     plot_tree_leafs_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
@@ -50,7 +50,8 @@ def plot_rules_of_tree_for_class(tree, tree_class_names, tree_focus_class_names,
 
 def plot_tree_leafs_for_class(tree, tree_class_names, tree_focus_class_names, X, y, class_names, feature_names,
                               feature_x=0, feature_y=1, leafs_title='Node #', leaf_labels=None, leaf_label_order=None,
-                              show_contour_legend=False, figsize=(7, 7)):
+                              show_contour_legend=False, figsize=None):
+    figsize = DEFAULT_PLOT_SIZE if figsize is None else figsize
     if isinstance(tree_focus_class_names, str):
         tree_focus_class_names = [tree_focus_class_names]
     if isinstance(feature_x, str):
@@ -152,7 +153,7 @@ def eval_trees(trees: Iterable[DecisionTreeClassifier], feature_names, class_nam
     classes = next(iter(trees)).classes_
     metrics = []
     for tree in trees:
-        constraints, rules, _, labels, _ = extract_rules(tree, feature_names, classes)
+        constraints, rules, _, labels, _, _ = extract_rules(tree, feature_names, classes)
         results = evaluate(tree, X_test, y_test, class_names)
         for label in np.unique(labels):
             metric = results.loc[class_names[label]].copy()

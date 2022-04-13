@@ -6,7 +6,7 @@ from data_generation.neighborhood_generation import neighbor_generator
 from enums.diff_classifier_method_type import diff_classifier_method_type
 import pandas as pd
 import numpy as np
-from util import CombinationClassifier, RuleClassifier
+from util import CombinationClassifier, RuleClassifier, DEFAULT_PLOT_SIZE
 import matplotlib.pyplot as plt
 from sklearn.metrics import classification_report, precision_recall_fscore_support
 
@@ -70,7 +70,7 @@ def plot_diro2c_2d(explanation, feature_x, feature_y, xlim=None, ylim=None, high
         feature_x = feature_names[idx_x]
         feature_y = feature_names[idx_y]
     if ax is None:
-        _, ax = plt.subplots(figsize=(7, 7))
+        _, ax = plt.subplots(figsize=DEFAULT_PLOT_SIZE)
     ax.set_xlabel(feature_x)
     ax.set_ylabel(feature_y)
     if xlim is not None:

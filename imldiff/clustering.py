@@ -408,7 +408,7 @@ def plot_2d_with_boundaries(node: ExplanationNode, x=0, y=1, fig=None, ax=None):
 
 
 def plot_dependence_curves_for_nodes(*nodes, feature, labels=None, kind='diffclf', simplify=False, color=None, color_label=None, alpha=None, axs=None, figsize=_DEFAULT_FIGSIZE, show_legend=True, separate_rows=False, adjust=True, **kw_nodes):
-    kw_nodes |= dict([(str(node), node) for node in nodes])
+    kw_nodes = dict([(str(node), node) for node in nodes]) | kw_nodes
     first_node = next(iter(kw_nodes.values()))
     labels = _get_labels(first_node, kind, labels)
     nrows, ncols = len(kw_nodes), len(labels)

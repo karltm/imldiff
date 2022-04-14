@@ -10,6 +10,10 @@ from sklearn.metrics import classification_report, precision_recall_fscore_suppo
 from shap.plots.colors import red_blue
 
 
+settings = {
+    'contour_legend_location': 'best',
+    'scatter_legend_location': 'best'
+}
 plt_colors = plt.rcParams['axes.prop_cycle'].by_key()['color']
 DEFAULT_PLOT_SIZE = (6, 5)
 
@@ -194,13 +198,13 @@ def plot_decision_boundary(X, z=None, title=None, feature_names=None, X_display=
             if show_contour_legend:
                 proxy = [proxy[idx] for idx in predict_value_order]
                 predict_value_names = [predict_value_names[idx] for idx in predict_value_order]
-                legend1 = ax.legend(proxy, predict_value_names, loc='upper left', title=z_label)
+                legend1 = ax.legend(proxy, predict_value_names, title=z_label, loc=settings['contour_legend_location'])
         for class_idx, class_ in enumerate(class_names):
             X_ = X_display[z == class_idx, :]
             if X_.shape[0] == 0:
                 continue
             ax.scatter(X_[:, idx_x], X_[:, idx_y], color=plt_colors[class_idx], edgecolors='k', label=str(class_), **kwargs)
-        ax.legend()
+        ax.legend(loc=settings['scatter_legend_location'])
         if legend1 is not None:
             plt.gca().add_artist(legend1)
     else:

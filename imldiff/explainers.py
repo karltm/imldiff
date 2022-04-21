@@ -33,6 +33,8 @@ def generate_shap_explanations(comparer: ModelComparer, X: np.ndarray, X_display
     :param algorithm: SHAP value generation algorithm. See shap.Explainer for possible values
     :param masker: Specify, if you want to customize the masker used during SHAP value generation
     """
+    masker = shap.maskers.Independent(data=X, max_samples=X.shape[0]) if masker is None else masker
+
     if space_type is None:
         if comparer.has_log_odds_support:
             space_type = 'log_odds'

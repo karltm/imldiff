@@ -5,6 +5,10 @@ import numpy as np
 from scipy.special import logsumexp
 
 
+class MethodUndefinedException(Exception):
+    pass
+
+
 class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
     """
     Classifier that classifies whether the passed base classifiers
@@ -41,7 +45,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         :return: predictions in array of shape (n, 2)
         """
         if not len(self.clf_a.classes_) == 2:
-            raise Exception('Probability estimates are undefined for multiclass classification problems')
+            raise MethodUndefinedException('Probability estimates are undefined for multiclass classification problems')
         X = check_array(X)
         proba_a = self.clf_a.predict_proba(X)
         proba_b = self.clf_b.predict_proba(X)
@@ -54,7 +58,7 @@ class BinaryDifferenceClassifier(BaseEstimator, ClassifierMixin):
         :return: predictions in array of shape (n, 2)
         """
         if not len(self.clf_a.classes_) == 2:
-            raise Exception('Probability estimates are undefined for multiclass classification problems')
+            raise MethodUndefinedException('Probability estimates are undefined for multiclass classification problems')
         X = check_array(X)
         log_proba_a = self.clf_a.predict_log_proba(X)
         log_proba_b = self.clf_b.predict_log_proba(X)

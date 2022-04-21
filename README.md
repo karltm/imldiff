@@ -6,7 +6,7 @@ It supports comparison of two classifiers and its explanations are based on the 
 The classifiers need to have a scikit-learn like interface.
 
 The examples are in the form of jupyter notebooks.
-You can start your own jupyter server or view them directly in your browser via [nbviewer](https://nbviewer.jupyter.org/github/MasterKarl/mocca-shap/tree/main/notebooks/).
+You can start your own jupyter server or view them directly in your browser via [nbviewer](https://nbviewer.jupyter.org/github/karltm/mocca-shap/tree/main/notebooks/).
 
 ## Usage
 

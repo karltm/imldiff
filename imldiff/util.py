@@ -352,21 +352,3 @@ def evaluate_predictions(y, y_pred, classes, class_names):
                       index=class_names)
     df['Support'] = df['Support'].astype(int)
     return df
-
-
-def group_metrics(metrics, by: str, direction='up'):
-    group_values = list(np.unique(metrics[by]))
-    if direction == 'down':
-        group_values = list(reversed(group_values))
-    rows = [metrics.loc[metrics[by] == group_values[0], :].set_index('Label')]
-    for alpha in group_values[1:]:
-        tmp = rows[-1].copy()
-        for idx, row in metrics.loc[metrics[by] == alpha, :].set_index('Label').iterrows():
-            tmp.loc[idx, :] = row
-        rows.append(tmp)
-    grouped_metrics = [row.reset_index() for row in rows]
-    if direction == 'up':
-        grouped_metrics = reversed(grouped_metrics)
-    grouped_metrics = pd.concat(grouped_metrics, keys=range(len(rows)), names=['Level'])
-    constraints = grouped_metrics['Constraints'].groupby(level=0).sum()
-    return grouped_metrics, constraints

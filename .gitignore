@@ -137,3 +137,6 @@ src/version.ts
 /notebooks/Benchmark Setting/Binary Classification/Adult Dataset/diro2c-datasets/server.tgz
 *.pdf
 *.png
+/notebooks/Artificial Setting/Binary Classification/B ignores a feature/data/explain.csv
+/notebooks/Artificial Setting/Binary Classification/B ignores a feature/data/train_a.csv
+/notebooks/Artificial Setting/Binary Classification/B ignores a feature/data/train_b.csv

@@ -109,11 +109,11 @@ class Explanation:
     def plot_feature_dependence(self, *features, classes=None, focus=None, color=None, color_label=None, figsize=_DEFAULT_FIGSIZE,
                                 alpha=None, axs=None, simplify=False, show_legend=True):
         node = self if focus is None else focus
+        features = node.features_ordered if len(features) == 0 else features
         if focus is None:
             plot_dependence_curves(self, features, classes, simplify=simplify, color=color,
                                    color_label=color_label, alpha=alpha, axs=axs, figsize=figsize, show_legend=show_legend)
         else:
-            features = node.features_ordered if len(features) == 0 else features
             for feature in features:
                 plot_dependence_curves_for_nodes(self, focus, feature=feature, labels=classes, simplify=simplify,
                                                  color=color, color_label=color_label, alpha=alpha, axs=axs,
